@@ -29,11 +29,13 @@ jobs:
             runner: ubuntu-24.04
             os: linux
             arch: x64
+            manylinux_image: quay.io/pypa/manylinux_2_28_x86_64
             build_dir: WebKitBuild/JSCOnly/Release
           - name: linux-arm64
             runner: ubuntu-24.04-arm
             os: linux
             arch: arm64
+            manylinux_image: quay.io/pypa/manylinux_2_28_aarch64
             build_dir: WebKitBuild/JSCOnly/Release
           - name: windows-x64
             runner: windows-2025
@@ -54,37 +56,16 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
 
-      - name: Install Linux dependencies
-        if: matrix.os == 'linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
-            clang \
-            cmake \
-            libicu-dev \
-            ninja-build \
-            perl \
-            python3 \
-            ruby
-
-      - name: Configure and build on Linux
+      - name: Build on manylinux 2.28
         if: matrix.os == 'linux'
         shell: bash
         run: |
-          export CC=clang
-          export CXX=clang++
-          cmake -S . -B "${{ matrix.build_dir }}" \
-            -G Ninja \
-            -DPORT=JSCOnly \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DDEVELOPER_MODE=ON \
-            -DDEVELOPER_MODE_FATAL_WARNINGS=OFF \
-            -DENABLE_API_TESTS=OFF \
-            '-DCMAKE_BUILD_RPATH=$ORIGIN/../lib' \
-            -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
-          cmake --build "${{ matrix.build_dir }}" \
-            --target jsc \
-            --parallel
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/work" \
+            --workdir /work \
+            "${{ matrix.manylinux_image }}" \
+            bash Tools/Scripts/build-jsc-manylinux.sh \
+              "${{ matrix.build_dir }}"
 
       - name: Install macOS dependencies
         if: matrix.os == 'macos'
@@ -105,6 +86,7 @@ jobs:
             -DDEVELOPER_MODE=ON \
             -DDEVELOPER_MODE_FATAL_WARNINGS=OFF \
             -DENABLE_API_TESTS=OFF \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
             '-DCMAKE_BUILD_RPATH=@loader_path/../lib' \
             -DCMAKE_BUILD_WITH_INSTALL_NAME_DIR=ON \
             '-DCMAKE_INSTALL_NAME_DIR=@rpath' \
@@ -190,19 +172,35 @@ jobs:
           build="${{ matrix.build_dir }}"
           package="JavaScriptCore-$RELEASE_TAG-${{ matrix.name }}"
           stage="$RUNNER_TEMP/$package"
+          runtime_args=()
+          if [[ "${{ matrix.os }}" == "linux" ]]; then
+            runtime_args+=(
+              --runtime-lib-dir
+              WebKitBuild/Dependencies/icu/lib
+              --glibc-baseline
+              2.28
+            )
+          fi
           python3 Tools/Scripts/package-jsc-sdk.py \
             --build-dir "$build" \
             --output-dir "$stage" \
             --platform "${{ matrix.os }}" \
             --tag "$RELEASE_TAG" \
             --commit "$GITHUB_SHA" \
-            --target "${{ matrix.name }}"
+            --target "${{ matrix.name }}" \
+            "${runtime_args[@]}"
           if [[ "${{ matrix.os }}" == "macos" ]]; then
             framework="$stage/lib/JavaScriptCore.framework/JavaScriptCore"
             install_name="$(otool -D "$framework" | tail -n 1)"
+            deployment_target="$(otool -l "$framework" | awk '$1 == "minos" { print $2; exit }')"
             [[ "$install_name" == @rpath/JavaScriptCore.framework/* ]]
+            [[ "$deployment_target" == 11.0 ]]
             "$stage/bin/jsc" -e 'print("JSC smoke test passed")'
           else
+            python3 Tools/Scripts/check-glibc-baseline.py \
+              --maximum 2.28 \
+              "$stage/bin/jsc" \
+              "$stage/lib"
             "$stage/bin/jsc" -e 'print("JSC smoke test passed")'
           fi
           consumer_build="$RUNNER_TEMP/jsc-sdk-consumer"
@@ -222,9 +220,12 @@ jobs:
           $build = "${{ matrix.build_dir }}"
           $package = "JavaScriptCore-$env:RELEASE_TAG-${{ matrix.name }}"
           $stage = Join-Path $env:RUNNER_TEMP $package
+          $symbolsPackage = "$package-symbols"
+          $symbolsStage = Join-Path $env:RUNNER_TEMP $symbolsPackage
           python Tools/Scripts/package-jsc-sdk.py `
             --build-dir $build `
             --output-dir $stage `
+            --symbols-output-dir $symbolsStage `
             --platform windows `
             --tag $env:RELEASE_TAG `
             --commit $env:GITHUB_SHA `
@@ -257,12 +258,15 @@ jobs:
           tar.exe -C $env:RUNNER_TEMP `
             -czf "$package.tar.gz" `
             $package
+          tar.exe -C $env:RUNNER_TEMP `
+            -czf "$symbolsPackage.tar.gz" `
+            $symbolsPackage
 
       - name: Upload packaged build
         uses: actions/upload-artifact@v7
         with:
           name: JavaScriptCore-${{ matrix.name }}
-          path: JavaScriptCore-${{ env.RELEASE_TAG }}-${{ matrix.name }}.*
+          path: JavaScriptCore-${{ env.RELEASE_TAG }}-${{ matrix.name }}*.tar.gz
           if-no-files-found: error
 
   release:

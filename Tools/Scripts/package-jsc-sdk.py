@@ -16,6 +16,23 @@ PUBLIC_HEADERS = (
     "WebKitAvailability.h",
 )
 
+WINDOWS_RUNTIME_PATTERNS = (
+    "icudt*.dll",
+    "icuin*.dll",
+    "icuuc*.dll",
+)
+
+WINDOWS_SYMBOLS = (
+    "JavaScriptCore.pdb",
+    "jsc.pdb",
+)
+
+LINUX_RUNTIME_PATTERNS = (
+    "libicudata.so*",
+    "libicui18n.so*",
+    "libicuuc.so*",
+)
+
 
 def copy_tree(source, destination):
     if not source.is_dir():
@@ -23,7 +40,29 @@ def copy_tree(source, destination):
     shutil.copytree(source, destination, symlinks=True)
 
 
+def copy_file(source, destination):
+    if not source.is_file():
+        raise RuntimeError(f"Missing build output file: {source}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+
+
 def copy_outputs(build_dir, output_dir, platform):
+    if platform == "windows":
+        copy_file(
+            build_dir / "bin" / "jsc.exe",
+            output_dir / "bin" / "jsc.exe",
+        )
+        copy_file(
+            build_dir / "bin" / "JavaScriptCore.dll",
+            output_dir / "bin" / "JavaScriptCore.dll",
+        )
+        copy_file(
+            build_dir / "lib" / "JavaScriptCore.lib",
+            output_dir / "lib" / "JavaScriptCore.lib",
+        )
+        return
+
     if platform != "macos":
         copy_tree(build_dir / "bin", output_dir / "bin")
         copy_tree(build_dir / "lib", output_dir / "lib")
@@ -81,8 +120,50 @@ def copy_vcpkg_runtime(build_dir, output_dir, platform):
         return
 
     installed = build_dir / "vcpkg_installed"
-    for runtime in installed.glob("*/bin/*.dll"):
-        shutil.copy2(runtime, output_dir / "bin" / runtime.name)
+    for pattern in WINDOWS_RUNTIME_PATTERNS:
+        for runtime in installed.glob(f"*/bin/{pattern}"):
+            shutil.copy2(runtime, output_dir / "bin" / runtime.name)
+
+
+def copy_linux_runtime(runtime_lib_dir, output_dir):
+    if not runtime_lib_dir or not runtime_lib_dir.is_dir():
+        raise RuntimeError(
+            "Linux packages require --runtime-lib-dir with the ICU libraries"
+        )
+
+    destination = output_dir / "lib"
+    destination.mkdir(parents=True, exist_ok=True)
+    for pattern in LINUX_RUNTIME_PATTERNS:
+        libraries = list(runtime_lib_dir.glob(pattern))
+        if not libraries:
+            raise RuntimeError(
+                f"Missing Linux runtime library {pattern} in {runtime_lib_dir}"
+            )
+        for library in libraries:
+            target = destination / library.name
+            if library.is_symlink():
+                target.symlink_to(library.readlink())
+            else:
+                shutil.copy2(library, target)
+
+    license_file = runtime_lib_dir.parent / "share" / "licenses" / "icu" / "LICENSE"
+    copy_file(
+        license_file,
+        output_dir / "share" / "licenses" / "icu" / "LICENSE",
+    )
+
+
+def copy_windows_symbols(build_dir, output_dir):
+    copied = False
+    for directory in ("bin", "lib"):
+        for name in WINDOWS_SYMBOLS:
+            source = build_dir / directory / name
+            if source.is_file():
+                copy_file(source, output_dir / directory / name)
+                copied = True
+
+    if not copied:
+        raise RuntimeError("No Windows PDB files were found")
 
 
 def cmake_config(platform):
@@ -121,9 +202,13 @@ unset(_JSC_PREFIX)
 """
 
 
-def readme(platform):
+def readme(platform, glibc_baseline=None):
     runtime = {
-        "linux": "The CMake target adds an RPATH for the packaged library.",
+        "linux": (
+            "The CMake target adds an RPATH for the packaged libraries. "
+            f"This SDK requires glibc {glibc_baseline} or newer and bundles "
+            "its ICU runtime."
+        ),
         "macos": "The CMake target adds an RPATH for the packaged framework.",
         "windows": "Copy the DLLs from `<sdk>/bin` beside your executable.",
     }[platform]
@@ -156,6 +241,14 @@ The supported public entry point is:
 """
 
 
+def symbols_readme():
+    return """# JavaScriptCore Windows symbols
+
+This package contains the PDB files for `JavaScriptCore.dll` and `jsc.exe`.
+It matches the Windows SDK with the same tag and target name.
+"""
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--build-dir", required=True, type=Path)
@@ -166,6 +259,9 @@ def main():
     parser.add_argument("--tag", required=True)
     parser.add_argument("--commit", required=True)
     parser.add_argument("--target", required=True)
+    parser.add_argument("--symbols-output-dir", type=Path)
+    parser.add_argument("--runtime-lib-dir", type=Path)
+    parser.add_argument("--glibc-baseline")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[2]
@@ -177,6 +273,14 @@ def main():
     copy_headers(build_dir, output_dir, args.platform)
     copy_vcpkg_runtime(build_dir, output_dir, args.platform)
     copy_vcpkg_licenses(build_dir, output_dir)
+    if args.platform == "linux":
+        copy_linux_runtime(args.runtime_lib_dir, output_dir)
+        if not args.glibc_baseline:
+            raise RuntimeError("Linux packages require --glibc-baseline")
+    elif args.runtime_lib_dir or args.glibc_baseline:
+        raise RuntimeError(
+            "--runtime-lib-dir and --glibc-baseline are only supported on Linux"
+        )
 
     license_dir = output_dir / "share" / "licenses" / "JavaScriptCore"
     license_dir.mkdir(parents=True)
@@ -196,10 +300,33 @@ def main():
         f"commit={args.commit}\n"
         f"target={args.target}\n"
     )
+    if args.glibc_baseline:
+        build_info += f"glibc={args.glibc_baseline}\n"
     (output_dir / "BUILD-INFO.txt").write_text(build_info, encoding="utf-8")
     (output_dir / "README.md").write_text(
-        readme(args.platform), encoding="utf-8"
+        readme(args.platform, args.glibc_baseline), encoding="utf-8"
     )
+
+    if args.symbols_output_dir:
+        if args.platform != "windows":
+            raise RuntimeError("Separate symbols are only supported on Windows")
+        symbols_dir = args.symbols_output_dir.resolve()
+        symbols_dir.mkdir(parents=True)
+        copy_windows_symbols(build_dir, symbols_dir)
+        (symbols_dir / "BUILD-INFO.txt").write_text(
+            build_info, encoding="utf-8"
+        )
+        (symbols_dir / "README.md").write_text(
+            symbols_readme(), encoding="utf-8"
+        )
+        symbols_license = (
+            symbols_dir / "share" / "licenses" / "JavaScriptCore"
+        )
+        symbols_license.mkdir(parents=True)
+        shutil.copy2(
+            root / "Source" / "JavaScriptCore" / "COPYING.LIB",
+            symbols_license / "COPYING.LIB",
+        )
 
 
 if __name__ == "__main__":
