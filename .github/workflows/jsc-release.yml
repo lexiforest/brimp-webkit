@@ -76,12 +76,14 @@ jobs:
         if: matrix.os == 'linux'
         shell: bash
         run: |
-          perl Tools/Scripts/build-jsc \
-            --jsc-only \
-            --release \
-            --no-use-ccache \
-            --generate-project-only \
-            --cmakeargs="-DENABLE_API_TESTS=OFF"
+          export CC=clang
+          export CXX=clang++
+          cmake -S . -B "${{ matrix.build_dir }}" \
+            -G Ninja \
+            -DPORT=JSCOnly \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DDEVELOPER_MODE=ON \
+            -DENABLE_API_TESTS=OFF
           cmake --build "${{ matrix.build_dir }}" \
             --target jsc \
             --parallel
@@ -95,13 +97,13 @@ jobs:
         shell: bash
         run: |
           icu_prefix="$(brew --prefix icu4c)"
-          perl Tools/Scripts/build-jsc \
-            --jsc-only \
-            --release \
-            --no-use-ccache \
-            --generate-project-only \
-            --cmakeargs="-DENABLE_API_TESTS=OFF \
-              -DCMAKE_PREFIX_PATH=$icu_prefix"
+          cmake -S . -B "${{ matrix.build_dir }}" \
+            -G Ninja \
+            -DPORT=JSCOnly \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DDEVELOPER_MODE=ON \
+            -DENABLE_API_TESTS=OFF \
+            "-DCMAKE_PREFIX_PATH=$icu_prefix"
           cmake --build "${{ matrix.build_dir }}" \
             --target jsc \
             --parallel
@@ -125,12 +127,17 @@ jobs:
             -SkipAutomaticLocation `
             -DevCmdArguments $arguments
           $env:VCPKG_ROOT = $env:VCPKG_INSTALLATION_ROOT
-          perl Tools/Scripts/build-jsc `
-            --jsc-only `
-            --release `
-            --no-use-ccache `
-            --generate-project-only `
-            --cmakeargs="-DENABLE_API_TESTS=OFF"
+          $toolchain = Join-Path $env:VCPKG_ROOT `
+            "scripts\buildsystems\vcpkg.cmake"
+          $triplet = "${{ matrix.arch }}-windows-webkit"
+          cmake -S . -B "${{ matrix.build_dir }}" `
+            -G Ninja `
+            -DPORT=JSCOnly `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DDEVELOPER_MODE=ON `
+            -DENABLE_API_TESTS=OFF `
+            "-DCMAKE_TOOLCHAIN_FILE=$toolchain" `
+            "-DVCPKG_TARGET_TRIPLET=$triplet"
           cmake --build "${{ matrix.build_dir }}" `
             --target jsc `
             --parallel
