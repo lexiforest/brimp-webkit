@@ -119,6 +119,8 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $true
+          $ninja = (Get-Command ninja.exe -ErrorAction Stop).Source
+          $ninjaDirectory = Split-Path $ninja
           $vswhere = Join-Path ${env:ProgramFiles(x86)} `
             "Microsoft Visual Studio\Installer\vswhere.exe"
           $vs = & $vswhere -latest -products * `
@@ -131,6 +133,8 @@ jobs:
           Enter-VsDevShell -VsInstallPath $vs `
             -SkipAutomaticLocation `
             -DevCmdArguments $arguments
+          $env:PATH = "$ninjaDirectory;$env:PATH"
+          Write-Host "Using Ninja at $ninja"
           $llvmRoot = Join-Path $env:ProgramFiles "LLVM"
           $clangCl = Join-Path $llvmRoot "bin\clang-cl.exe"
           $builtinsArch = if ("${{ matrix.arch }}" -eq "arm64") {
@@ -150,6 +154,7 @@ jobs:
           $toolchain = Join-Path $env:VCPKG_ROOT `
             "scripts\buildsystems\vcpkg.cmake"
           $triplet = "${{ matrix.arch }}-windows-webkit"
+          $PSNativeCommandUseErrorActionPreference = $false
           cmake -S . -B "${{ matrix.build_dir }}" `
             -G Ninja `
             -DPORT=JSCOnly `
@@ -159,8 +164,21 @@ jobs:
             -DENABLE_API_TESTS=OFF `
             "-DCMAKE_C_COMPILER=$clangCl" `
             "-DCMAKE_CXX_COMPILER=$clangCl" `
+            "-DCMAKE_MAKE_PROGRAM=$ninja" `
             "-DCMAKE_TOOLCHAIN_FILE=$toolchain" `
             "-DVCPKG_TARGET_TRIPLET=$triplet"
+          $configureExitCode = $LASTEXITCODE
+          if ($configureExitCode -ne 0) {
+            $manifestLog = Join-Path "${{ matrix.build_dir }}" `
+              "vcpkg-manifest-install.log"
+            if (Test-Path $manifestLog) {
+              Write-Host "::group::vcpkg manifest install log"
+              Get-Content $manifestLog
+              Write-Host "::endgroup::"
+            }
+            throw "CMake configuration failed: $configureExitCode"
+          }
+          $PSNativeCommandUseErrorActionPreference = $true
           cmake --build "${{ matrix.build_dir }}" `
             --target jsc `
             --parallel
