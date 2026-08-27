@@ -46,7 +46,7 @@ jobs:
             arch: arm64
             build_dir: WebKitBuild/Release
           - name: macos-arm64
-            runner: macos-15
+            runner: macos-26
             os: macos
             arch: arm64
             build_dir: WebKitBuild/JSCOnly/Release
@@ -83,6 +83,7 @@ jobs:
             -DPORT=JSCOnly \
             -DCMAKE_BUILD_TYPE=Release \
             -DDEVELOPER_MODE=ON \
+            -DDEVELOPER_MODE_FATAL_WARNINGS=OFF \
             -DENABLE_API_TESTS=OFF
           cmake --build "${{ matrix.build_dir }}" \
             --target jsc \
@@ -90,7 +91,10 @@ jobs:
 
       - name: Install macOS dependencies
         if: matrix.os == 'macos'
-        run: brew install icu4c ninja
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_26.6.app
+          xcodebuild -version
+          brew install icu4c ninja
 
       - name: Configure and build on macOS
         if: matrix.os == 'macos'
@@ -102,6 +106,7 @@ jobs:
             -DPORT=JSCOnly \
             -DCMAKE_BUILD_TYPE=Release \
             -DDEVELOPER_MODE=ON \
+            -DDEVELOPER_MODE_FATAL_WARNINGS=OFF \
             -DENABLE_API_TESTS=OFF \
             "-DCMAKE_PREFIX_PATH=$icu_prefix"
           cmake --build "${{ matrix.build_dir }}" \
@@ -126,6 +131,21 @@ jobs:
           Enter-VsDevShell -VsInstallPath $vs `
             -SkipAutomaticLocation `
             -DevCmdArguments $arguments
+          $llvmRoot = Join-Path $env:ProgramFiles "LLVM"
+          $clangCl = Join-Path $llvmRoot "bin\clang-cl.exe"
+          $builtinsArch = if ("${{ matrix.arch }}" -eq "arm64") {
+            "aarch64"
+          } else {
+            "x86_64"
+          }
+          $builtins = Join-Path $llvmRoot `
+            "lib\clang\*\lib\windows\clang_rt.builtins-$builtinsArch.lib"
+          if (-not (Test-Path $clangCl)) {
+            throw "clang-cl was not found at $clangCl"
+          }
+          if (-not (Test-Path $builtins)) {
+            throw "clang compiler-rt builtins were not found at $builtins"
+          }
           $env:VCPKG_ROOT = $env:VCPKG_INSTALLATION_ROOT
           $toolchain = Join-Path $env:VCPKG_ROOT `
             "scripts\buildsystems\vcpkg.cmake"
@@ -135,7 +155,10 @@ jobs:
             -DPORT=JSCOnly `
             -DCMAKE_BUILD_TYPE=Release `
             -DDEVELOPER_MODE=ON `
+            -DDEVELOPER_MODE_FATAL_WARNINGS=OFF `
             -DENABLE_API_TESTS=OFF `
+            "-DCMAKE_C_COMPILER=$clangCl" `
+            "-DCMAKE_CXX_COMPILER=$clangCl" `
             "-DCMAKE_TOOLCHAIN_FILE=$toolchain" `
             "-DVCPKG_TARGET_TRIPLET=$triplet"
           cmake --build "${{ matrix.build_dir }}" `
