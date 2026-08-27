@@ -1,0 +1,219 @@
+name: JavaScriptCore release
+
+on:
+  push:
+    tags:
+      - "jsc-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing jsc-v* tag to build and release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: >-
+    ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runner: ubuntu-24.04
+            os: linux
+            arch: x64
+            build_dir: WebKitBuild/JSCOnly/Release
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            os: linux
+            arch: arm64
+            build_dir: WebKitBuild/JSCOnly/Release
+          - name: windows-x64
+            runner: windows-2025
+            os: windows
+            arch: x64
+            build_dir: WebKitBuild/Release
+          - name: windows-arm64
+            runner: windows-11-vs2026-arm
+            os: windows
+            arch: arm64
+            build_dir: WebKitBuild/Release
+          - name: macos-arm64
+            runner: macos-15
+            os: macos
+            arch: arm64
+            build_dir: WebKitBuild/JSCOnly/Release
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            clang \
+            cmake \
+            libicu-dev \
+            ninja-build \
+            perl \
+            python3 \
+            ruby
+
+      - name: Configure and build on Linux
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          perl Tools/Scripts/build-jsc \
+            --jsc-only \
+            --release \
+            --no-use-ccache \
+            --generate-project-only \
+            --cmakeargs="-DENABLE_API_TESTS=OFF"
+          cmake --build "${{ matrix.build_dir }}" \
+            --target jsc \
+            --parallel
+
+      - name: Install macOS dependencies
+        if: matrix.os == 'macos'
+        run: brew install icu4c ninja
+
+      - name: Configure and build on macOS
+        if: matrix.os == 'macos'
+        shell: bash
+        run: |
+          icu_prefix="$(brew --prefix icu4c)"
+          perl Tools/Scripts/build-jsc \
+            --jsc-only \
+            --release \
+            --no-use-ccache \
+            --generate-project-only \
+            --cmakeargs="-DENABLE_API_TESTS=OFF \
+              -DCMAKE_PREFIX_PATH=$icu_prefix"
+          cmake --build "${{ matrix.build_dir }}" \
+            --target jsc \
+            --parallel
+
+      - name: Configure and build on Windows
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} `
+            "Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * `
+            -property installationPath
+          $devShell = Join-Path $vs `
+            "Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Import-Module $devShell
+          $arguments = "-arch=${{ matrix.arch }} " + `
+            "-host_arch=${{ matrix.arch }}"
+          Enter-VsDevShell -VsInstallPath $vs `
+            -SkipAutomaticLocation `
+            -DevCmdArguments $arguments
+          $env:VCPKG_ROOT = $env:VCPKG_INSTALLATION_ROOT
+          perl Tools/Scripts/build-jsc `
+            --jsc-only `
+            --release `
+            --no-use-ccache `
+            --generate-project-only `
+            --cmakeargs="-DENABLE_API_TESTS=OFF"
+          cmake --build "${{ matrix.build_dir }}" `
+            --target jsc `
+            --parallel
+
+      - name: Smoke-test and package Unix build
+        if: matrix.os != 'windows'
+        shell: bash
+        run: |
+          build="${{ matrix.build_dir }}"
+          package="JavaScriptCore-$RELEASE_TAG-${{ matrix.name }}"
+          stage="$RUNNER_TEMP/$package"
+          mkdir -p "$stage"
+          cp -R "$build/bin" "$stage/bin"
+          cp -R "$build/lib" "$stage/lib"
+          {
+            echo "tag=$RELEASE_TAG"
+            echo "commit=$GITHUB_SHA"
+            echo "target=${{ matrix.name }}"
+          } > "$stage/BUILD-INFO.txt"
+          if [[ "${{ matrix.os }}" == "macos" ]]; then
+            DYLD_LIBRARY_PATH="$stage/lib" \
+              "$stage/bin/jsc" -e 'print("JSC smoke test passed")'
+          else
+            LD_LIBRARY_PATH="$stage/lib" \
+              "$stage/bin/jsc" -e 'print("JSC smoke test passed")'
+          fi
+          tar -C "$RUNNER_TEMP" -czf "$package.tar.gz" "$package"
+
+      - name: Smoke-test and package Windows build
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $build = "${{ matrix.build_dir }}"
+          $package = "JavaScriptCore-$env:RELEASE_TAG-${{ matrix.name }}"
+          $stage = Join-Path $env:RUNNER_TEMP $package
+          New-Item -ItemType Directory -Path $stage | Out-Null
+          Copy-Item "$build\bin" "$stage\bin" -Recurse
+          Copy-Item "$build\lib" "$stage\lib" -Recurse
+          @(
+            "tag=$env:RELEASE_TAG"
+            "commit=$env:GITHUB_SHA"
+            "target=${{ matrix.name }}"
+          ) | Set-Content "$stage\BUILD-INFO.txt"
+          & "$stage\bin\jsc.exe" -e 'print("JSC smoke test passed")'
+          if ($LASTEXITCODE -ne 0) {
+            throw "JSC smoke test failed with exit code $LASTEXITCODE"
+          }
+          Compress-Archive `
+            -Path "$stage\*" `
+            -DestinationPath "$package.zip"
+
+      - name: Upload packaged build
+        uses: actions/upload-artifact@v7
+        with:
+          name: JavaScriptCore-${{ matrix.name }}
+          path: JavaScriptCore-${{ env.RELEASE_TAG }}-${{ matrix.name }}.*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packaged builds
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create checksums
+        working-directory: dist
+        run: sha256sum JavaScriptCore-* > SHA256SUMS
+
+      - name: Create release and upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            dist/JavaScriptCore-* \
+            dist/SHA256SUMS \
+            --verify-tag \
+            --generate-notes
