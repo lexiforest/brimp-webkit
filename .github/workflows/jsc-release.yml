@@ -40,11 +40,6 @@ jobs:
             os: windows
             arch: x64
             build_dir: WebKitBuild/Release
-          - name: windows-arm64
-            runner: windows-11-vs2026-arm
-            os: windows
-            arch: arm64
-            build_dir: WebKitBuild/Release
           - name: macos-arm64
             runner: macos-26
             os: macos
@@ -84,7 +79,9 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DDEVELOPER_MODE=ON \
             -DDEVELOPER_MODE_FATAL_WARNINGS=OFF \
-            -DENABLE_API_TESTS=OFF
+            -DENABLE_API_TESTS=OFF \
+            '-DCMAKE_BUILD_RPATH=$ORIGIN/../lib' \
+            -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON
           cmake --build "${{ matrix.build_dir }}" \
             --target jsc \
             --parallel
@@ -108,6 +105,9 @@ jobs:
             -DDEVELOPER_MODE=ON \
             -DDEVELOPER_MODE_FATAL_WARNINGS=OFF \
             -DENABLE_API_TESTS=OFF \
+            '-DCMAKE_BUILD_RPATH=@loader_path/../lib' \
+            -DCMAKE_BUILD_WITH_INSTALL_NAME_DIR=ON \
+            '-DCMAKE_INSTALL_NAME_DIR=@rpath' \
             "-DCMAKE_PREFIX_PATH=$icu_prefix"
           cmake --build "${{ matrix.build_dir }}" \
             --target jsc \
@@ -190,21 +190,27 @@ jobs:
           build="${{ matrix.build_dir }}"
           package="JavaScriptCore-$RELEASE_TAG-${{ matrix.name }}"
           stage="$RUNNER_TEMP/$package"
-          mkdir -p "$stage"
-          cp -R "$build/bin" "$stage/bin"
-          cp -R "$build/lib" "$stage/lib"
-          {
-            echo "tag=$RELEASE_TAG"
-            echo "commit=$GITHUB_SHA"
-            echo "target=${{ matrix.name }}"
-          } > "$stage/BUILD-INFO.txt"
+          python3 Tools/Scripts/package-jsc-sdk.py \
+            --build-dir "$build" \
+            --output-dir "$stage" \
+            --platform "${{ matrix.os }}" \
+            --tag "$RELEASE_TAG" \
+            --commit "$GITHUB_SHA" \
+            --target "${{ matrix.name }}"
           if [[ "${{ matrix.os }}" == "macos" ]]; then
-            DYLD_LIBRARY_PATH="$stage/lib" \
-              "$stage/bin/jsc" -e 'print("JSC smoke test passed")'
+            framework="$stage/lib/JavaScriptCore.framework/JavaScriptCore"
+            install_name="$(otool -D "$framework" | tail -n 1)"
+            [[ "$install_name" == @rpath/JavaScriptCore.framework/* ]]
+            "$stage/bin/jsc" -e 'print("JSC smoke test passed")'
           else
-            LD_LIBRARY_PATH="$stage/lib" \
-              "$stage/bin/jsc" -e 'print("JSC smoke test passed")'
+            "$stage/bin/jsc" -e 'print("JSC smoke test passed")'
           fi
+          consumer_build="$RUNNER_TEMP/jsc-sdk-consumer"
+          cmake -S .github/jsc-sdk-smoke -B "$consumer_build" \
+            -G Ninja \
+            "-DCMAKE_PREFIX_PATH=$stage"
+          cmake --build "$consumer_build" --parallel
+          "$consumer_build/jsc-sdk-smoke"
           tar -C "$RUNNER_TEMP" -czf "$package.tar.gz" "$package"
 
       - name: Smoke-test and package Windows build
@@ -212,24 +218,45 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          $PSNativeCommandUseErrorActionPreference = $true
           $build = "${{ matrix.build_dir }}"
           $package = "JavaScriptCore-$env:RELEASE_TAG-${{ matrix.name }}"
           $stage = Join-Path $env:RUNNER_TEMP $package
-          New-Item -ItemType Directory -Path $stage | Out-Null
-          Copy-Item "$build\bin" "$stage\bin" -Recurse
-          Copy-Item "$build\lib" "$stage\lib" -Recurse
-          @(
-            "tag=$env:RELEASE_TAG"
-            "commit=$env:GITHUB_SHA"
-            "target=${{ matrix.name }}"
-          ) | Set-Content "$stage\BUILD-INFO.txt"
+          python Tools/Scripts/package-jsc-sdk.py `
+            --build-dir $build `
+            --output-dir $stage `
+            --platform windows `
+            --tag $env:RELEASE_TAG `
+            --commit $env:GITHUB_SHA `
+            --target "${{ matrix.name }}"
           & "$stage\bin\jsc.exe" -e 'print("JSC smoke test passed")'
-          if ($LASTEXITCODE -ne 0) {
-            throw "JSC smoke test failed with exit code $LASTEXITCODE"
-          }
-          Compress-Archive `
-            -Path "$stage\*" `
-            -DestinationPath "$package.zip"
+
+          $ninja = (Get-Command ninja.exe -ErrorAction Stop).Source
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} `
+            "Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * `
+            -property installationPath
+          $devShell = Join-Path $vs `
+            "Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Import-Module $devShell
+          Enter-VsDevShell -VsInstallPath $vs `
+            -SkipAutomaticLocation `
+            -DevCmdArguments "-arch=x64 -host_arch=x64"
+          $clangCl = Join-Path $env:ProgramFiles "LLVM\bin\clang-cl.exe"
+          $consumerBuild = Join-Path $env:RUNNER_TEMP `
+            "jsc-sdk-consumer"
+          cmake -S .github/jsc-sdk-smoke -B $consumerBuild `
+            -G Ninja `
+            "-DCMAKE_C_COMPILER=$clangCl" `
+            "-DCMAKE_MAKE_PROGRAM=$ninja" `
+            "-DCMAKE_PREFIX_PATH=$stage"
+          cmake --build $consumerBuild --parallel
+          $env:PATH = "$stage\bin;$env:PATH"
+          & "$consumerBuild\jsc-sdk-smoke.exe"
+
+          tar.exe -C $env:RUNNER_TEMP `
+            -czf "$package.tar.gz" `
+            $package
 
       - name: Upload packaged build
         uses: actions/upload-artifact@v7
