@@ -1,0 +1,4 @@
+PRODUCT_NAME = WebKitAutomationWorker;
+PRODUCT_BUNDLE_IDENTIFIER = org.webkit.WebKitAutomationWorker;
+INFOPLIST_FILE = mac/Info.plist;
+STRIP_STYLE = debugging;

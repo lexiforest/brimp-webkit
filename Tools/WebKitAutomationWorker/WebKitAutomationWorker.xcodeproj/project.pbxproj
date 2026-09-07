@@ -1,0 +1,209 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 55;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000010000000000000001 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = A10000110000000000000001 /* main.m */; };
+		A10000020000000000000001 /* AutomationPage.m in Sources */ = {isa = PBXBuildFile; fileRef = A10000130000000000000001 /* AutomationPage.m */; };
+		A10000030000000000000001 /* AutomationWorker.m in Sources */ = {isa = PBXBuildFile; fileRef = A10000150000000000000001 /* AutomationWorker.m */; };
+		A10000040000000000000001 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000170000000000000001 /* WebKit.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A10000100000000000000001 /* WebKitAutomationWorker.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WebKitAutomationWorker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000110000000000000001 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		A10000120000000000000001 /* AutomationPage.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AutomationPage.h; sourceTree = "<group>"; };
+		A10000130000000000000001 /* AutomationPage.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AutomationPage.m; sourceTree = "<group>"; };
+		A10000140000000000000001 /* AutomationWorker.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AutomationWorker.h; sourceTree = "<group>"; };
+		A10000150000000000000001 /* AutomationWorker.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AutomationWorker.m; sourceTree = "<group>"; };
+		A10000160000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A10000170000000000000001 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = WebKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000180000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		A10000190000000000000001 /* DebugRelease.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = DebugRelease.xcconfig; sourceTree = "<group>"; };
+		A100001A0000000000000001 /* WebKitAutomationWorker.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = WebKitAutomationWorker.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000200000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000040000000000000001 /* WebKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10000300000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A10000310000000000000001 /* mac */,
+				A10000320000000000000001 /* Configurations */,
+				A10000170000000000000001 /* WebKit.framework */,
+				A10000330000000000000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000310000000000000001 /* mac */ = {
+			isa = PBXGroup;
+			children = (
+				A10000110000000000000001 /* main.m */,
+				A10000120000000000000001 /* AutomationPage.h */,
+				A10000130000000000000001 /* AutomationPage.m */,
+				A10000140000000000000001 /* AutomationWorker.h */,
+				A10000150000000000000001 /* AutomationWorker.m */,
+				A10000160000000000000001 /* Info.plist */,
+			);
+			path = mac;
+			sourceTree = "<group>";
+		};
+		A10000320000000000000001 /* Configurations */ = {
+			isa = PBXGroup;
+			children = (
+				A10000180000000000000001 /* Base.xcconfig */,
+				A10000190000000000000001 /* DebugRelease.xcconfig */,
+				A100001A0000000000000001 /* WebKitAutomationWorker.xcconfig */,
+			);
+			path = Configurations;
+			sourceTree = "<group>";
+		};
+		A10000330000000000000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000100000000000000001 /* WebKitAutomationWorker.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000400000000000000001 /* WebKitAutomationWorker */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000710000000000000001 /* Build configuration list for PBXNativeTarget "WebKitAutomationWorker" */;
+			buildPhases = (
+				A10000500000000000000001 /* Sources */,
+				A10000200000000000000001 /* Frameworks */,
+				A10000510000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WebKitAutomationWorker;
+			productName = WebKitAutomationWorker;
+			productReference = A10000100000000000000001 /* WebKitAutomationWorker.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000600000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 2700;
+			};
+			buildConfigurationList = A10000700000000000000001 /* Build configuration list for PBXProject "WebKitAutomationWorker" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A10000300000000000000001;
+			productRefGroup = A10000330000000000000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000400000000000000001 /* WebKitAutomationWorker */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000510000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000500000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000010000000000000001 /* main.m in Sources */,
+				A10000020000000000000001 /* AutomationPage.m in Sources */,
+				A10000030000000000000001 /* AutomationWorker.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A10000800000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000190000000000000001 /* DebugRelease.xcconfig */;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_OPTIMIZATION_LEVEL = 0;
+			};
+			name = Debug;
+		};
+		A10000810000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000190000000000000001 /* DebugRelease.xcconfig */;
+			buildSettings = {
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+			};
+			name = Release;
+		};
+		A10000820000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A100001A0000000000000001 /* WebKitAutomationWorker.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		A10000830000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A100001A0000000000000001 /* WebKitAutomationWorker.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A10000700000000000000001 /* Build configuration list for PBXProject "WebKitAutomationWorker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000800000000000000001 /* Debug */,
+				A10000810000000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000710000000000000001 /* Build configuration list for PBXNativeTarget "WebKitAutomationWorker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000820000000000000001 /* Debug */,
+				A10000830000000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A10000600000000000000001 /* Project object */;
+}

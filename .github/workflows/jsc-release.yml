@@ -269,9 +269,95 @@ jobs:
           path: JavaScriptCore-${{ env.RELEASE_TAG }}-${{ matrix.name }}*.tar.gz
           if-no-files-found: error
 
+  worker:
+    name: Build WebKitAutomationWorker macos-arm64
+    runs-on: macos-26
+    timeout-minutes: 180
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_26.6.app
+          xcodebuild -version
+
+      - name: Check available disk space
+        shell: bash
+        run: |
+          available_kib="$(df -Pk "$GITHUB_WORKSPACE" | awk 'NR == 2 { print $4 }')"
+          if (( available_kib < 15 * 1024 * 1024 )); then
+            brew cleanup --prune=all
+          fi
+          df -h "$GITHUB_WORKSPACE"
+
+      - name: Build WebKit
+        shell: bash
+        run: |
+          perl Tools/Scripts/build-webkit \
+            --release \
+            --only-webkit \
+            --architecture=arm64
+
+      - name: Build WebKitAutomationWorker
+        shell: bash
+        run: |
+          xcodebuild \
+            -project Tools/WebKitAutomationWorker/WebKitAutomationWorker.xcodeproj \
+            -scheme WebKitAutomationWorker \
+            -configuration Release \
+            -derivedDataPath WebKitBuild/WebKitAutomationWorkerDerived \
+            SYMROOT="$GITHUB_WORKSPACE/WebKitBuild" \
+            OBJROOT="$GITHUB_WORKSPACE/WebKitBuild" \
+            COMPILATION_CACHE_ENABLE_CACHING=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Validate and package WebKitAutomationWorker
+        shell: bash
+        run: |
+          build="$GITHUB_WORKSPACE/WebKitBuild/Release"
+          executable="$build/WebKitAutomationWorker.app/Contents/MacOS/WebKitAutomationWorker"
+          package="WebKitAutomationWorker-$RELEASE_TAG-macos-arm64"
+          stage="$RUNNER_TEMP/$package"
+          runtime="$stage/runtime"
+
+          test -x "$executable"
+          lipo -verify_arch arm64 "$executable"
+          otool -L "$executable" | grep -q '/WebKit.framework/'
+
+          mkdir -p "$runtime"
+          cp -a "$build/WebKitAutomationWorker.app" "$runtime/"
+          shopt -s nullglob
+          products=("$build"/*.framework "$build"/*.xpc "$build"/*.dylib)
+          if (( ${#products[@]} == 0 )); then
+            echo "No WebKit runtime products were built" >&2
+            exit 1
+          fi
+          cp -a "${products[@]}" "$runtime/"
+
+          cat > "$stage/README.txt" <<'EOF'
+          Run the controller with runtime/WebKitAutomationWorker.app as its
+          worker path. Set both DYLD_FRAMEWORK_PATH and
+          __XPC_DYLD_FRAMEWORK_PATH to the absolute path of runtime so that the
+          worker and its subprocesses use the WebKit build shipped here.
+          EOF
+
+          tar -C "$RUNNER_TEMP" -czf "$package.tar.gz" "$package"
+
+      - name: Upload packaged worker
+        uses: actions/upload-artifact@v7
+        with:
+          name: WebKitAutomationWorker-macos-arm64
+          path: WebKitAutomationWorker-${{ env.RELEASE_TAG }}-macos-arm64.tar.gz
+          if-no-files-found: error
+
   release:
     name: Publish GitHub release
-    needs: build
+    needs: [build, worker]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -285,7 +371,7 @@ jobs:
 
       - name: Create checksums
         working-directory: dist
-        run: sha256sum JavaScriptCore-* > SHA256SUMS
+        run: sha256sum JavaScriptCore-* WebKitAutomationWorker-* > SHA256SUMS
 
       - name: Create release and upload assets
         env:
@@ -294,6 +380,7 @@ jobs:
         run: |
           gh release create "$RELEASE_TAG" \
             dist/JavaScriptCore-* \
+            dist/WebKitAutomationWorker-* \
             dist/SHA256SUMS \
             --verify-tag \
             --generate-notes
