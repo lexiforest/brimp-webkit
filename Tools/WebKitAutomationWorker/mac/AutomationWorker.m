@@ -32,8 +32,11 @@
     _WKAutomationSession *_automationSession;
     WKProcessPool *_processPool;
     WKWebsiteDataStore *_websiteDataStore;
+    NSString *_browserContextIdentifier;
     NSMutableDictionary<NSString *, AutomationPage *> *_pages;
     NSMutableDictionary<NSString *, NSMutableDictionary<NSString *, WKJSHandle *> *> *_handlesByTarget;
+    NSMutableDictionary<NSString *, NSString *> *_targetIdentifiersBySession;
+    NSMutableDictionary *_sessionsByRequest;
 }
 - (void)captureScreenshot:(NSDictionary *)parameters webView:(WKWebView *)webView contentSize:(NSSize)contentSize identifier:(id)identifier;
 - (void)captureFullPageScreenshot:(NSDictionary *)parameters webView:(WKWebView *)webView contentSize:(NSSize)contentSize identifier:(id)identifier;
@@ -89,6 +92,8 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
     _controlSocket = [[NSFileHandle alloc] initWithFileDescriptor:descriptor closeOnDealloc:YES];
     _pages = [NSMutableDictionary dictionary];
     _handlesByTarget = [NSMutableDictionary dictionary];
+    _targetIdentifiersBySession = [NSMutableDictionary dictionary];
+    _sessionsByRequest = [NSMutableDictionary dictionary];
     return self;
 }
 
@@ -149,28 +154,42 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
 
 - (void)replyTo:(id)identifier result:(NSDictionary *)result
 {
-    [self send:@{ @"id": identifier ?: [NSNull null], @"result": result ?: @{ } }];
+    NSMutableDictionary *message = [@{ @"id": identifier ?: [NSNull null], @"result": result ?: @{ } } mutableCopy];
+    NSString *sessionIdentifier = identifier ? _sessionsByRequest[identifier] : nil;
+    if (sessionIdentifier)
+        message[@"sessionId"] = sessionIdentifier;
+    if (identifier)
+        [_sessionsByRequest removeObjectForKey:identifier];
+    [self send:message];
 }
 
 - (void)replyTo:(id)identifier error:(NSString *)message
 {
-    [self send:@{ @"id": identifier ?: [NSNull null], @"error": @{ @"code": @(-32000), @"message": message ?: @"Worker operation failed" } }];
+    NSMutableDictionary *reply = [@{ @"id": identifier ?: [NSNull null], @"error": @{ @"code": @(-32000), @"message": message ?: @"Worker operation failed" } } mutableCopy];
+    NSString *sessionIdentifier = identifier ? _sessionsByRequest[identifier] : nil;
+    if (sessionIdentifier)
+        reply[@"sessionId"] = sessionIdentifier;
+    if (identifier)
+        [_sessionsByRequest removeObjectForKey:identifier];
+    [self send:reply];
 }
 
 - (void)handleRequest:(NSDictionary *)request
 {
     id identifier = request[@"id"];
-    NSString *operation = request[@"operation"];
+    NSString *method = request[@"method"];
     NSDictionary *parameters = request[@"params"];
-    if (![operation isKindOfClass:[NSString class]] || ![parameters isKindOfClass:[NSDictionary class]]) {
-        [self replyTo:identifier error:@"Invalid worker request"];
+    if (![method isKindOfClass:[NSString class]] || ![parameters isKindOfClass:[NSDictionary class]]) {
+        [self replyTo:identifier error:@"Invalid CDP request"];
         return;
     }
-    if ([operation isEqualToString:@"ping"]) {
-        [self replyTo:identifier result:@{ @"protocolVersion": @1 }];
+    if (identifier && [request[@"sessionId"] isKindOfClass:[NSString class]])
+        _sessionsByRequest[identifier] = request[@"sessionId"];
+    if ([method isEqualToString:@"Browser.getVersion"]) {
+        [self replyTo:identifier result:@{ @"protocolVersion": @"1.3", @"product": @"WebKitAutomationWorker/0.1", @"revision": @"", @"userAgent": @"WebKitAutomationWorker/0.1", @"jsVersion": @"" }];
         return;
     }
-    if ([operation isEqualToString:@"context.create"]) {
+    if ([method isEqualToString:@"Target.createBrowserContext"]) {
         if (_websiteDataStore || _pages.count) {
             [self replyTo:identifier error:@"Worker already owns a browser context"];
             return;
@@ -186,24 +205,31 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
         [_processPool _setAutomationSession:_automationSession];
 #pragma clang diagnostic pop
-        [self replyTo:identifier result:@{ }];
+        _browserContextIdentifier = [NSUUID UUID].UUIDString;
+        [self replyTo:identifier result:@{ @"browserContextId": _browserContextIdentifier }];
         return;
     }
-    if ([operation isEqualToString:@"context.dispose"]) {
+    if ([method isEqualToString:@"Target.disposeBrowserContext"]) {
+        if (!_browserContextIdentifier || ![parameters[@"browserContextId"] isEqualToString:_browserContextIdentifier]) {
+            [self replyTo:identifier error:@"Unknown browserContextId"];
+            return;
+        }
         for (AutomationPage *page in _pages.allValues.copy)
             [page close];
         [_pages removeAllObjects];
         [_handlesByTarget removeAllObjects];
+        [_targetIdentifiersBySession removeAllObjects];
         _automationSession = nil;
         _processPool = nil;
         _websiteDataStore = nil;
+        _browserContextIdentifier = nil;
         [self replyTo:identifier result:@{ }];
         return;
     }
-    if ([operation isEqualToString:@"page.create"]) {
+    if ([method isEqualToString:@"Target.createTarget"]) {
         NSString *url = [parameters[@"url"] isKindOfClass:[NSString class]] ? parameters[@"url"] : @"about:blank";
-        NSString *targetIdentifier = [parameters[@"targetId"] isKindOfClass:[NSString class]] ? parameters[@"targetId"] : nil;
-        if (!targetIdentifier.length || !_websiteDataStore || _pages[targetIdentifier]) {
+        NSString *targetIdentifier = [NSUUID UUID].UUIDString;
+        if (!_websiteDataStore || ![parameters[@"browserContextId"] isEqualToString:_browserContextIdentifier]) {
             [self replyTo:identifier error:@"Invalid page creation request"];
             return;
         }
@@ -223,10 +249,25 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         _pages[targetIdentifier] = page;
         _handlesByTarget[targetIdentifier] = [NSMutableDictionary dictionary];
         [page loadURLString:url];
-        [self replyTo:identifier result:@{ }];
+        [self replyTo:identifier result:@{ @"targetId": targetIdentifier }];
         return;
     }
-    if ([operation isEqualToString:@"page.close"]) {
+    if ([method isEqualToString:@"Target.attachToTarget"]) {
+        NSString *targetIdentifier = parameters[@"targetId"];
+        if (!_pages[targetIdentifier]) {
+            [self replyTo:identifier error:@"Unknown targetId"];
+            return;
+        }
+        if (![parameters[@"flatten"] boolValue]) {
+            [self replyTo:identifier error:@"Only flattened sessions are supported"];
+            return;
+        }
+        NSString *sessionIdentifier = [NSUUID UUID].UUIDString;
+        _targetIdentifiersBySession[sessionIdentifier] = targetIdentifier;
+        [self replyTo:identifier result:@{ @"sessionId": sessionIdentifier }];
+        return;
+    }
+    if ([method isEqualToString:@"Target.closeTarget"]) {
         NSString *targetIdentifier = parameters[@"targetId"];
         AutomationPage *page = _pages[targetIdentifier];
         if (!page) {
@@ -235,12 +276,17 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         }
         [_handlesByTarget removeObjectForKey:targetIdentifier];
         [_pages removeObjectForKey:targetIdentifier];
+        for (NSString *sessionIdentifier in _targetIdentifiersBySession.allKeys.copy) {
+            if ([_targetIdentifiersBySession[sessionIdentifier] isEqualToString:targetIdentifier])
+                [_targetIdentifiersBySession removeObjectForKey:sessionIdentifier];
+        }
         [page close];
-        [self replyTo:identifier result:@{ }];
+        [self replyTo:identifier result:@{ @"success": @YES }];
         return;
     }
 
-    NSString *targetIdentifier = parameters[@"targetId"];
+    NSString *sessionIdentifier = [request[@"sessionId"] isKindOfClass:[NSString class]] ? request[@"sessionId"] : nil;
+    NSString *targetIdentifier = sessionIdentifier ? _targetIdentifiersBySession[sessionIdentifier] : nil;
     AutomationPage *page = _pages[targetIdentifier];
     NSMutableDictionary<NSString *, WKJSHandle *> *handles = _handlesByTarget[targetIdentifier];
     WKWebView *webView = page.webView;
@@ -248,11 +294,11 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         [self replyTo:identifier error:@"No active page"];
         return;
     }
-    if ([operation hasSuffix:@".enable"] || [operation hasSuffix:@".disable"]) {
+    if ([method hasSuffix:@".enable"] || [method hasSuffix:@".disable"]) {
         [self replyTo:identifier result:@{ }];
         return;
     }
-    if ([operation isEqualToString:@"page.navigate"]) {
+    if ([method isEqualToString:@"Page.navigate"]) {
         NSString *urlString = parameters[@"url"];
         NSURL *url = [urlString isKindOfClass:[NSString class]] ? [NSURL URLWithString:urlString] : nil;
         if (!url) {
@@ -264,13 +310,13 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         [self replyTo:identifier result:@{ @"frameId": @"main", @"navigationId": [NSString stringWithFormat:@"%p", navigation] }];
         return;
     }
-    if ([operation isEqualToString:@"page.reload"]) {
+    if ([method isEqualToString:@"Page.reload"]) {
         [handles removeAllObjects];
         WKNavigation *navigation = [webView reload];
         [self replyTo:identifier result:@{ @"navigationId": [NSString stringWithFormat:@"%p", navigation] }];
         return;
     }
-    if ([operation isEqualToString:@"emulation.setDeviceMetricsOverride"]) {
+    if ([method isEqualToString:@"Emulation.setDeviceMetricsOverride"]) {
         NSInteger width = [parameters[@"width"] integerValue];
         NSInteger height = [parameters[@"height"] integerValue];
         if (width <= 0 || height <= 0 || width > 32767 || height > 32767) {
@@ -282,7 +328,7 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         [self replyTo:identifier result:@{ }];
         return;
     }
-    if ([operation isEqualToString:@"page.getFrameTree"]) {
+    if ([method isEqualToString:@"Page.getFrameTree"]) {
         [webView _frames:^(_WKFrameTreeNode *root) {
             if (!root) {
                 [self replyTo:identifier error:@"Could not retrieve frame tree"];
@@ -292,7 +338,7 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         }];
         return;
     }
-    if ([operation isEqualToString:@"runtime.evaluate"]) {
+    if ([method isEqualToString:@"Runtime.evaluate"]) {
         NSString *expression = parameters[@"expression"];
         if (![expression isKindOfClass:[NSString class]]) {
             [self replyTo:identifier error:@"Runtime.evaluate requires expression"];
@@ -312,7 +358,7 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         }];
         return;
     }
-    if ([operation isEqualToString:@"runtime.callFunctionOn"]) {
+    if ([method isEqualToString:@"Runtime.callFunctionOn"]) {
         WKJSHandle *handle = handles[parameters[@"objectId"]];
         NSString *function = parameters[@"functionDeclaration"];
         if (![function isKindOfClass:[NSString class]]) {
@@ -355,7 +401,7 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         }];
         return;
     }
-    if ([operation isEqualToString:@"runtime.releaseObject"]) {
+    if ([method isEqualToString:@"Runtime.releaseObject"]) {
         if (![handles objectForKey:parameters[@"objectId"]]) {
             [self replyTo:identifier error:@"Unknown objectId"];
             return;
@@ -364,7 +410,7 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         [self replyTo:identifier result:@{ }];
         return;
     }
-    if ([operation isEqualToString:@"page.captureScreenshot"]) {
+    if ([method isEqualToString:@"Page.captureScreenshot"]) {
         if (![parameters[@"captureBeyondViewport"] boolValue]) {
             [self captureScreenshot:parameters webView:webView contentSize:NSZeroSize identifier:identifier];
             return;
@@ -383,15 +429,15 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         }];
         return;
     }
-    if ([operation isEqualToString:@"input.dispatchMouseEvent"]) {
+    if ([method isEqualToString:@"Input.dispatchMouseEvent"]) {
         [self dispatchMouseEvent:parameters webView:webView identifier:identifier];
         return;
     }
-    if ([operation isEqualToString:@"input.dispatchKeyEvent"]) {
+    if ([method isEqualToString:@"Input.dispatchKeyEvent"]) {
         [self dispatchKeyEvent:parameters webView:webView identifier:identifier];
         return;
     }
-    [self replyTo:identifier error:[NSString stringWithFormat:@"Unsupported native operation: %@", operation]];
+    [self replyTo:identifier error:[NSString stringWithFormat:@"Unsupported CDP method: %@", method]];
 }
 
 static NSEventModifierFlags modifierFlagsForCDP(NSUInteger modifiers)
@@ -703,7 +749,26 @@ static unsigned short keyCodeForCDP(NSDictionary *parameters)
 {
     if (!targetIdentifier.length || !_pages[targetIdentifier])
         return;
-    [self send:@{ @"event": event, @"targetId": targetIdentifier, @"params": parameters ?: @{ } }];
+    static NSDictionary<NSString *, NSString *> *methods;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        methods = @{
+            @"page.frameStartedLoading": @"Page.frameStartedLoading", @"page.frameNavigated": @"Page.frameNavigated",
+            @"page.domContentEventFired": @"Page.domContentEventFired", @"page.loadEventFired": @"Page.loadEventFired",
+            @"page.frameStoppedLoading": @"Page.frameStoppedLoading", @"page.javascriptDialogOpening": @"Page.javascriptDialogOpening",
+            @"page.javascriptDialogClosed": @"Page.javascriptDialogClosed", @"page.windowOpen": @"Page.windowOpen",
+            @"runtime.executionContextCreated": @"Runtime.executionContextCreated", @"network.requestWillBeSent": @"Network.requestWillBeSent",
+            @"network.responseReceived": @"Network.responseReceived", @"network.loadingFinished": @"Network.loadingFinished",
+            @"network.loadingFailed": @"Network.loadingFailed",
+        };
+    });
+    NSString *method = methods[event];
+    if (!method)
+        return;
+    for (NSString *sessionIdentifier in _targetIdentifiersBySession) {
+        if ([_targetIdentifiersBySession[sessionIdentifier] isEqualToString:targetIdentifier])
+            [self send:@{ @"method": method, @"sessionId": sessionIdentifier, @"params": parameters ?: @{ } }];
+    }
 }
 
 @end
