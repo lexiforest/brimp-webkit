@@ -16,5 +16,8 @@ typedef void (^AutomationPageEventHandler)(NSString *, NSDictionary *);
 - (instancetype)initWithDataStore:(WKWebsiteDataStore *)dataStore processPool:(WKProcessPool *)processPool size:(NSSize)size headless:(BOOL)headless eventHandler:(AutomationPageEventHandler)eventHandler;
 - (void)loadURLString:(NSString *)urlString;
 - (void)close;
+- (BOOL)handleJavaScriptDialogWithAccept:(BOOL)accept promptText:(NSString *)promptText;
+- (NSString *)addDocumentScript:(NSString *)source;
+- (BOOL)removeDocumentScript:(NSString *)identifier;
 
 @end

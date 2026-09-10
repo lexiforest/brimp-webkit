@@ -5,7 +5,9 @@
 
 #import "AutomationPage.h"
 #import <Carbon/Carbon.h>
+#import <Network/Network.h>
 #import <WebKit/WKFrameInfoPrivate.h>
+#import <WebKit/WKHTTPCookieStorePrivate.h>
 #import <WebKit/WKJSHandle.h>
 #import <WebKit/WKProcessPoolPrivate.h>
 #import <WebKit/WKSnapshotConfiguration.h>
@@ -18,6 +20,7 @@
 #import <WebKit/_WKFrameTreeNode.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <math.h>
 
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
@@ -42,6 +45,7 @@
 - (void)captureFullPageScreenshot:(NSDictionary *)parameters webView:(WKWebView *)webView contentSize:(NSSize)contentSize identifier:(id)identifier;
 - (void)replyTo:(id)identifier withScreenshotImage:(NSImage *)image parameters:(NSDictionary *)parameters;
 - (NSDictionary *)remoteObjectForValue:(id)value handles:(NSMutableDictionary<NSString *, WKJSHandle *> *)handles;
+- (void)handleCookieCommand:(NSString *)method parameters:(NSDictionary *)parameters webView:(WKWebView *)webView identifier:(id)identifier;
 @end
 
 @implementation AutomationWorker
@@ -174,11 +178,44 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
     [self send:reply];
 }
 
+// Apply only after validation, so a rejected update preserves the current proxy.
+- (NSString *)setProxyServer:(id)value dataStore:(WKWebsiteDataStore *)dataStore
+{
+    if (![value isKindOfClass:[NSString class]])
+        return @"proxyServer must be a URL string (or an empty string to clear it)";
+    if (@available(macOS 14.0, *)) {
+        if (![value length]) {
+            dataStore.proxyConfigurations = @[];
+            return nil;
+        }
+        NSURLComponents *url = [NSURLComponents componentsWithString:value];
+        NSString *scheme = url.scheme.lowercaseString;
+        BOOL socks = [scheme isEqualToString:@"socks5"];
+        BOOL http = [scheme isEqualToString:@"http"];
+        if ((!socks && !http) || !url.host.length || !url.port || url.port.integerValue < 1 || url.port.integerValue > 65535
+            || (url.path.length && ![url.path isEqualToString:@"/"]) || url.query || url.fragment)
+            return @"proxyServer must be http://host:port or socks5://host:port, optionally with credentials";
+        NSString *host = url.host;
+        if ([host hasPrefix:@"["] && [host hasSuffix:@"]"])
+            host = [host substringWithRange:NSMakeRange(1, host.length - 2)];
+        nw_endpoint_t endpoint = nw_endpoint_create_host(host.UTF8String, url.port.stringValue.UTF8String);
+        nw_proxy_config_t proxy = socks ? nw_proxy_config_create_socksv5(endpoint) : nw_proxy_config_create_http_connect(endpoint, nil);
+        if (!proxy)
+            return @"Could not create proxy configuration";
+        if (url.user)
+            nw_proxy_config_set_username_and_password(proxy, url.user.UTF8String, url.password.UTF8String);
+        nw_proxy_config_set_failover_allowed(proxy, false);
+        dataStore.proxyConfigurations = @[ proxy ];
+        return nil;
+    }
+    return @"Proxy configuration requires macOS 14 or later";
+}
+
 - (void)handleRequest:(NSDictionary *)request
 {
     id identifier = request[@"id"];
     NSString *method = request[@"method"];
-    NSDictionary *parameters = request[@"params"];
+    NSDictionary *parameters = request[@"params"] ?: @{ };
     if (![method isKindOfClass:[NSString class]] || ![parameters isKindOfClass:[NSDictionary class]]) {
         [self replyTo:identifier error:@"Invalid CDP request"];
         return;
@@ -186,7 +223,7 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
     if (identifier && [request[@"sessionId"] isKindOfClass:[NSString class]])
         _sessionsByRequest[identifier] = request[@"sessionId"];
     if ([method isEqualToString:@"Browser.getVersion"]) {
-        [self replyTo:identifier result:@{ @"protocolVersion": @"1.3", @"product": @"WebKitAutomationWorker/0.1", @"revision": @"", @"userAgent": @"WebKitAutomationWorker/0.1", @"jsVersion": @"" }];
+        [self replyTo:identifier result:@{ @"protocolVersion": @"1.3", @"product": @"WebKitAutomationWorker/0.1", @"brimpProxy": @YES, @"revision": @"", @"userAgent": @"WebKitAutomationWorker/0.1", @"jsVersion": @"" }];
         return;
     }
     if ([method isEqualToString:@"Target.createBrowserContext"]) {
@@ -194,7 +231,19 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
             [self replyTo:identifier error:@"Worker already owns a browser context"];
             return;
         }
-        _websiteDataStore = [WKWebsiteDataStore nonPersistentDataStore];
+        WKWebsiteDataStore *dataStore = [WKWebsiteDataStore nonPersistentDataStore];
+        if (parameters[@"proxyBypassList"]) {
+            [self replyTo:identifier error:@"proxyBypassList is not supported"];
+            return;
+        }
+        if (parameters[@"proxyServer"]) {
+            NSString *error = [self setProxyServer:parameters[@"proxyServer"] dataStore:dataStore];
+            if (error) {
+                [self replyTo:identifier error:error];
+                return;
+            }
+        }
+        _websiteDataStore = dataStore;
         _processPool = [WKProcessPool new];
         _WKAutomationSessionConfiguration *configuration = [_WKAutomationSessionConfiguration new];
         configuration.controlledByExternalAgent = YES;
@@ -207,6 +256,18 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
 #pragma clang diagnostic pop
         _browserContextIdentifier = [NSUUID UUID].UUIDString;
         [self replyTo:identifier result:@{ @"browserContextId": _browserContextIdentifier }];
+        return;
+    }
+    if ([method isEqualToString:@"Brimp.setProxy"]) {
+        if (!_browserContextIdentifier || ![parameters[@"browserContextId"] isEqualToString:_browserContextIdentifier]) {
+            [self replyTo:identifier error:@"Unknown browserContextId"];
+            return;
+        }
+        NSString *error = [self setProxyServer:parameters[@"proxyServer"] dataStore:_websiteDataStore];
+        if (error)
+            [self replyTo:identifier error:error];
+        else
+            [self replyTo:identifier result:@{ }];
         return;
     }
     if ([method isEqualToString:@"Target.disposeBrowserContext"]) {
@@ -285,6 +346,15 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         return;
     }
 
+    if ([@[ @"Storage.getCookies", @"Storage.setCookies", @"Storage.clearCookies", @"Storage.deleteCookies" ] containsObject:method]) {
+        if (!_websiteDataStore || (parameters[@"browserContextId"] && ![parameters[@"browserContextId"] isEqual:_browserContextIdentifier])) {
+            [self replyTo:identifier error:@"Unknown browserContextId"];
+            return;
+        }
+        [self handleCookieCommand:method parameters:parameters webView:nil identifier:identifier];
+        return;
+    }
+
     NSString *sessionIdentifier = [request[@"sessionId"] isKindOfClass:[NSString class]] ? request[@"sessionId"] : nil;
     NSString *targetIdentifier = sessionIdentifier ? _targetIdentifiersBySession[sessionIdentifier] : nil;
     AutomationPage *page = _pages[targetIdentifier];
@@ -295,6 +365,51 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         return;
     }
     if ([method hasSuffix:@".enable"] || [method hasSuffix:@".disable"]) {
+        [self replyTo:identifier result:@{ }];
+        return;
+    }
+    if ([@[ @"Network.getCookies", @"Network.getAllCookies", @"Network.setCookie", @"Network.setCookies", @"Network.deleteCookies", @"Network.clearBrowserCookies" ] containsObject:method]) {
+        [self handleCookieCommand:method parameters:parameters webView:webView identifier:identifier];
+        return;
+    }
+    if ([method isEqualToString:@"Page.addScriptToEvaluateOnNewDocument"]) {
+        if (![parameters[@"source"] isKindOfClass:NSString.class]) {
+            [self replyTo:identifier error:@"source must be a string"];
+            return;
+        }
+        for (NSString *key in @[ @"includeCommandLineAPI", @"runImmediately" ]) {
+            id value = parameters[key];
+            if (value && (![value isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)value) != CFBooleanGetTypeID())) {
+                [self replyTo:identifier error:[NSString stringWithFormat:@"%@ must be a boolean", key]];
+                return;
+            }
+        }
+        if (parameters[@"worldName"] || [parameters[@"includeCommandLineAPI"] boolValue] || [parameters[@"runImmediately"] boolValue]) {
+            [self replyTo:identifier error:@"worldName, includeCommandLineAPI and runImmediately are not supported"];
+            return;
+        }
+        [self replyTo:identifier result:@{ @"identifier": [page addDocumentScript:parameters[@"source"]] }];
+        return;
+    }
+    if ([method isEqualToString:@"Page.removeScriptToEvaluateOnNewDocument"]) {
+        if (![parameters[@"identifier"] isKindOfClass:NSString.class] || ![page removeDocumentScript:parameters[@"identifier"]]) {
+            [self replyTo:identifier error:@"Unknown script identifier"];
+            return;
+        }
+        [self replyTo:identifier result:@{ }];
+        return;
+    }
+    if ([method isEqualToString:@"Page.handleJavaScriptDialog"]) {
+        id accept = parameters[@"accept"];
+        id promptText = parameters[@"promptText"] ?: @"";
+        if (![accept isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)accept) != CFBooleanGetTypeID() || ![promptText isKindOfClass:NSString.class]) {
+            [self replyTo:identifier error:@"accept must be a boolean and promptText must be a string"];
+            return;
+        }
+        if (![page handleJavaScriptDialogWithAccept:[accept boolValue] promptText:promptText]) {
+            [self replyTo:identifier error:@"No JavaScript dialog is open"];
+            return;
+        }
         [self replyTo:identifier result:@{ }];
         return;
     }
@@ -438,6 +553,211 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         return;
     }
     [self replyTo:identifier error:[NSString stringWithFormat:@"Unsupported CDP method: %@", method]];
+}
+
+static NSURL *cookieURL(id value)
+{
+    if (![value isKindOfClass:NSString.class])
+        return nil;
+    NSURL *url = [NSURL URLWithString:value];
+    return url.host.length && ([@[ @"http", @"https" ] containsObject:url.scheme.lowercaseString]) ? url : nil;
+}
+
+static NSDictionary *cookieObject(NSHTTPCookie *cookie)
+{
+    NSMutableDictionary *result = [@{
+        @"name": cookie.name, @"value": cookie.value, @"domain": cookie.domain, @"path": cookie.path,
+        @"expires": cookie.expiresDate ? @(cookie.expiresDate.timeIntervalSince1970) : @(-1),
+        @"size": @([cookie.name lengthOfBytesUsingEncoding:NSUTF8StringEncoding] + [cookie.value lengthOfBytesUsingEncoding:NSUTF8StringEncoding]),
+        @"httpOnly": @(cookie.HTTPOnly), @"secure": @(cookie.secure), @"session": @(cookie.sessionOnly),
+        @"priority": @"Medium", @"sameParty": @NO, @"sourceScheme": cookie.secure ? @"Secure" : @"NonSecure", @"sourcePort": @(-1),
+    } mutableCopy];
+    if (cookie.sameSitePolicy.length)
+        result[@"sameSite"] = cookie.sameSitePolicy.capitalizedString;
+    return result;
+}
+
+static NSHTTPCookie *parseCookie(id input, NSString **error)
+{
+    if (![input isKindOfClass:NSDictionary.class]) {
+        *error = @"Each cookie must be an object";
+        return nil;
+    }
+    NSDictionary *parameters = input;
+    NSSet *supported = [NSSet setWithArray:@[ @"name", @"value", @"url", @"domain", @"path", @"secure", @"httpOnly", @"sameSite", @"expires" ]];
+    for (NSString *key in parameters) {
+        if (![supported containsObject:key]) {
+            *error = [NSString stringWithFormat:@"Unsupported cookie parameter: %@", key];
+            return nil;
+        }
+    }
+    for (NSString *key in @[ @"name", @"value", @"url", @"domain", @"path", @"sameSite" ]) {
+        if ((parameters[key] || [@[ @"name", @"value" ] containsObject:key]) && ![parameters[key] isKindOfClass:NSString.class]) {
+            *error = [NSString stringWithFormat:@"Cookie %@ must be a string", key];
+            return nil;
+        }
+    }
+    for (NSString *key in @[ @"secure", @"httpOnly" ]) {
+        id value = parameters[key];
+        if (value && (![value isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)value) != CFBooleanGetTypeID())) {
+            *error = [NSString stringWithFormat:@"Cookie %@ must be a boolean", key];
+            return nil;
+        }
+    }
+    NSURL *url = cookieURL(parameters[@"url"]);
+    NSString *domain = parameters[@"domain"] ?: url.host.lowercaseString;
+    NSString *path = parameters[@"path"] ?: @"/";
+    if ((parameters[@"url"] && !url) || !domain.length || ![path hasPrefix:@"/"] || [domain rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"/\r\n\t "]].location != NSNotFound) {
+        *error = @"Cookie requires a valid HTTP(S) url or domain and an absolute path";
+        return nil;
+    }
+    NSString *sameSite = parameters[@"sameSite"];
+    if (sameSite && ![@[ @"Strict", @"Lax", @"None" ] containsObject:sameSite]) {
+        *error = @"Invalid cookie sameSite";
+        return nil;
+    }
+    id expires = parameters[@"expires"];
+    if (expires && (![expires isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)expires) == CFBooleanGetTypeID() || !isfinite([expires doubleValue]) || ([expires doubleValue] < 0 && [expires doubleValue] != -1))) {
+        *error = @"Cookie expires must be -1 or a nonnegative finite timestamp";
+        return nil;
+    }
+    BOOL secure = parameters[@"secure"] ? [parameters[@"secure"] boolValue] : [url.scheme.lowercaseString isEqualToString:@"https"];
+    NSString *name = parameters[@"name"];
+    NSString *value = parameters[@"value"];
+    if ([name rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"=;\r\n\t "]].location != NSNotFound || [value rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@";\r\n"]].location != NSNotFound
+        || ([sameSite isEqualToString:@"None"] && !secure)
+        || ([name hasPrefix:@"__Secure-"] && !secure)
+        || ([name hasPrefix:@"__Host-"] && (!secure || parameters[@"domain"] || ![path isEqualToString:@"/"]))) {
+        *error = @"Invalid cookie name, value, or security attributes";
+        return nil;
+    }
+    NSMutableDictionary *properties = [@{ NSHTTPCookieName: name, NSHTTPCookieValue: value, NSHTTPCookieDomain: domain.lowercaseString, NSHTTPCookiePath: path } mutableCopy];
+    if (secure)
+        properties[NSHTTPCookieSecure] = @YES;
+    if ([parameters[@"httpOnly"] boolValue])
+        properties[@"HttpOnly"] = @YES;
+    if (sameSite)
+        properties[NSHTTPCookieSameSitePolicy] = sameSite.lowercaseString;
+    if (expires && [expires doubleValue] >= 0)
+        properties[NSHTTPCookieExpires] = [NSDate dateWithTimeIntervalSince1970:[expires doubleValue]];
+    else
+        properties[NSHTTPCookieDiscard] = @YES;
+    NSHTTPCookie *cookie = [NSHTTPCookie cookieWithProperties:properties];
+    if (!cookie)
+        *error = @"Invalid cookie";
+    return cookie;
+}
+
+- (void)handleCookieCommand:(NSString *)method parameters:(NSDictionary *)parameters webView:(WKWebView *)webView identifier:(id)identifier
+{
+    WKHTTPCookieStore *store = _websiteDataStore.httpCookieStore;
+    if ([method isEqualToString:@"Network.setCookie"] || [method hasSuffix:@".setCookies"]) {
+        BOOL single = [method isEqualToString:@"Network.setCookie"];
+        id inputs = single ? @[ parameters ] : parameters[@"cookies"];
+        if (![inputs isKindOfClass:NSArray.class]) {
+            [self replyTo:identifier error:@"cookies must be an array"];
+            return;
+        }
+        NSMutableArray *cookies = [NSMutableArray array];
+        for (id input in inputs) {
+            NSString *error = nil;
+            NSHTTPCookie *cookie = parseCookie(input, &error);
+            if (!cookie) {
+                [self replyTo:identifier error:error];
+                return;
+            }
+            [cookies addObject:cookie];
+        }
+        // Validate the entire batch before mutating the context's cookie store.
+        dispatch_group_t group = dispatch_group_create();
+        for (NSHTTPCookie *cookie in cookies) {
+            dispatch_group_enter(group);
+            [store setCookie:cookie completionHandler:^{ dispatch_group_leave(group); }];
+        }
+        dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+            [self replyTo:identifier result:single ? @{ @"success": @YES } : @{ }];
+        });
+        return;
+    }
+    if ([method isEqualToString:@"Network.getCookies"]) {
+        id urls = parameters[@"urls"];
+        if (!urls) {
+            [webView _frames:^(_WKFrameTreeNode *root) {
+                NSMutableArray *frameURLs = [NSMutableArray array];
+                NSMutableArray *pending = [NSMutableArray array];
+                if (root)
+                    [pending addObject:root];
+                while (pending.count) {
+                    _WKFrameTreeNode *node = pending.lastObject;
+                    [pending removeLastObject];
+                    if (cookieURL(node.info.request.URL.absoluteString))
+                        [frameURLs addObject:node.info.request.URL.absoluteString];
+                    [pending addObjectsFromArray:node.childFrames ?: @[ ]];
+                }
+                [self handleCookieCommand:method parameters:@{ @"urls": frameURLs } webView:webView identifier:identifier];
+            }];
+            return;
+        }
+        if (![urls isKindOfClass:NSArray.class]) {
+            [self replyTo:identifier error:@"urls must be an array of HTTP(S) URLs"];
+            return;
+        }
+        for (id url in urls) {
+            if (!cookieURL(url)) {
+                [self replyTo:identifier error:@"urls must contain HTTP(S) URLs"];
+                return;
+            }
+        }
+        NSMutableDictionary *matches = [NSMutableDictionary dictionary];
+        dispatch_group_t group = dispatch_group_create();
+        for (NSString *url in urls) {
+            dispatch_group_enter(group);
+            [store _getCookiesForURL:cookieURL(url) completionHandler:^(NSArray<NSHTTPCookie *> *cookies) {
+                for (NSHTTPCookie *cookie in cookies)
+                    matches[@[ cookie.name, cookie.domain, cookie.path ]] = cookieObject(cookie);
+                dispatch_group_leave(group);
+            }];
+        }
+        dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+            [self replyTo:identifier result:@{ @"cookies": matches.allValues }];
+        });
+        return;
+    }
+    BOOL deleting = [method hasSuffix:@".deleteCookies"];
+    BOOL clearing = [method isEqualToString:@"Storage.clearCookies"] || [method isEqualToString:@"Network.clearBrowserCookies"];
+    if (deleting) {
+        if (![parameters[@"name"] isKindOfClass:NSString.class]
+            || (!parameters[@"url"] && !parameters[@"domain"])
+            || (parameters[@"url"] && !cookieURL(parameters[@"url"]))
+            || (parameters[@"domain"] && (![parameters[@"domain"] isKindOfClass:NSString.class] || ![parameters[@"domain"] length]))
+            || (parameters[@"path"] && ![parameters[@"path"] isKindOfClass:NSString.class]) || parameters[@"partitionKey"]) {
+            [self replyTo:identifier error:@"deleteCookies requires name and HTTP(S) url or domain; partitionKey is unsupported"];
+            return;
+        }
+    }
+    void (^complete)(NSArray<NSHTTPCookie *> *) = ^(NSArray<NSHTTPCookie *> *cookies) {
+        if (!deleting && !clearing) {
+            NSMutableArray *result = [NSMutableArray array];
+            for (NSHTTPCookie *cookie in cookies)
+                [result addObject:cookieObject(cookie)];
+            [self replyTo:identifier result:@{ @"cookies": result }];
+            return;
+        }
+        dispatch_group_t group = dispatch_group_create();
+        for (NSHTTPCookie *cookie in cookies) {
+            if (deleting && (![cookie.name isEqual:parameters[@"name"]]
+                || (parameters[@"domain"] && ![cookie.domain isEqual:parameters[@"domain"]])
+                || (parameters[@"path"] && ![cookie.path isEqual:parameters[@"path"]])))
+                continue;
+            dispatch_group_enter(group);
+            [store deleteCookie:cookie completionHandler:^{ dispatch_group_leave(group); }];
+        }
+        dispatch_group_notify(group, dispatch_get_main_queue(), ^{ [self replyTo:identifier result:@{ }]; });
+    };
+    if (deleting && parameters[@"url"])
+        [store _getCookiesForURL:cookieURL(parameters[@"url"]) completionHandler:complete];
+    else
+        [store getAllCookies:complete];
 }
 
 static NSEventModifierFlags modifierFlagsForCDP(NSUInteger modifiers)

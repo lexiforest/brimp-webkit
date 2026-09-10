@@ -256,7 +256,8 @@ CommandResult<void> WebAutomationSession::sendInspectorMessage(const Inspector::
 {
     assertIsMainRunLoop();
 
-    SYNC_FAIL_WITH_PREDEFINED_ERROR_IF(!m_client || !m_client->shouldEnableInspectorTesting(*this), NotImplemented);
+    bool hasLocalTransport = m_remoteChannel && m_remoteChannel->connectionType() == Inspector::FrontendChannel::ConnectionType::Local;
+    SYNC_FAIL_WITH_PREDEFINED_ERROR_IF(!hasLocalTransport && (!m_client || !m_client->shouldEnableInspectorTesting(*this)), NotImplemented);
 
     RefPtr page = webPageProxyForHandle(browsingContextHandle);
     SYNC_FAIL_WITH_PREDEFINED_ERROR_IF(!page, WindowNotFound);

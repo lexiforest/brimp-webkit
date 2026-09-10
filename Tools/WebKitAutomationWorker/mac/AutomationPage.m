@@ -11,6 +11,8 @@
 #import <WebKit/WKPreferencesPrivate.h>
 #import <WebKit/WKProcessPool.h>
 #import <WebKit/WKUIDelegate.h>
+#import <WebKit/WKUserContentControllerPrivate.h>
+#import <WebKit/WKUserScript.h>
 #import <WebKit/WKWebView.h>
 #import <WebKit/WKWebViewConfiguration.h>
 #import <WebKit/WKWebViewPrivate.h>
@@ -30,6 +32,9 @@
     AutomationPageEventHandler _eventHandler;
     NSWindow *_window;
     WKWebView *_webView;
+    void (^_dialogCompletion)(BOOL, NSString *);
+    NSString *_dialogType;
+    NSMutableDictionary<NSString *, WKUserScript *> *_documentScripts;
 }
 
 - (instancetype)initWithDataStore:(WKWebsiteDataStore *)dataStore processPool:(WKProcessPool *)processPool size:(NSSize)size headless:(BOOL)headless eventHandler:(AutomationPageEventHandler)eventHandler
@@ -38,6 +43,7 @@
         return nil;
 
     _eventHandler = [eventHandler copy];
+    _documentScripts = [NSMutableDictionary dictionary];
     NSRect frame = NSMakeRect(0, 0, size.width, size.height);
     _window = [[NSWindow alloc] initWithContentRect:frame styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
     _window.tabbingMode = NSWindowTabbingModeDisallowed;
@@ -86,6 +92,8 @@
 
 - (void)close
 {
+    [self handleJavaScriptDialogWithAccept:NO promptText:@""];
+    [_documentScripts removeAllObjects];
     _webView.navigationDelegate = nil;
     _webView.UIDelegate = nil;
     _webView._resourceLoadDelegate = nil;
@@ -93,6 +101,38 @@
     _webView = nil;
     _window = nil;
     _eventHandler = nil;
+}
+
+- (NSString *)addDocumentScript:(NSString *)source
+{
+    NSString *identifier = NSUUID.UUID.UUIDString;
+    WKUserScript *script = [[WKUserScript alloc] initWithSource:source injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:NO];
+    _documentScripts[identifier] = script;
+    [_webView.configuration.userContentController addUserScript:script];
+    return identifier;
+}
+
+- (BOOL)removeDocumentScript:(NSString *)identifier
+{
+    WKUserScript *script = _documentScripts[identifier];
+    if (!script)
+        return NO;
+    [_webView.configuration.userContentController _removeUserScript:script];
+    [_documentScripts removeObjectForKey:identifier];
+    return YES;
+}
+
+- (BOOL)handleJavaScriptDialogWithAccept:(BOOL)accept promptText:(NSString *)promptText
+{
+    if (!_dialogCompletion)
+        return NO;
+    void (^completion)(BOOL, NSString *) = _dialogCompletion;
+    NSString *userInput = accept && [_dialogType isEqualToString:@"prompt"] ? promptText : @"";
+    _dialogCompletion = nil;
+    _dialogType = nil;
+    completion(accept, promptText);
+    [self emit:@"page.javascriptDialogClosed" parameters:@{ @"result": @(accept), @"userInput": userInput }];
+    return YES;
 }
 
 - (void)emit:(NSString *)name parameters:(NSDictionary *)parameters
@@ -147,23 +187,23 @@ static NSString *navigationIdentifier(WKNavigation *navigation)
 
 - (void)webView:(WKWebView *)webView runJavaScriptAlertPanelWithMessage:(NSString *)message initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(void))completionHandler
 {
+    _dialogType = @"alert";
+    _dialogCompletion = ^(BOOL accept, NSString *text) { completionHandler(); };
     [self emit:@"page.javascriptDialogOpening" parameters:@{ @"url": frame.request.URL.absoluteString ?: @"", @"message": message, @"type": @"alert", @"hasBrowserHandler": @YES, @"defaultPrompt": @"" }];
-    completionHandler();
-    [self emit:@"page.javascriptDialogClosed" parameters:@{ @"result": @YES, @"userInput": @"" }];
 }
 
 - (void)webView:(WKWebView *)webView runJavaScriptConfirmPanelWithMessage:(NSString *)message initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(BOOL))completionHandler
 {
+    _dialogType = @"confirm";
+    _dialogCompletion = ^(BOOL accept, NSString *text) { completionHandler(accept); };
     [self emit:@"page.javascriptDialogOpening" parameters:@{ @"url": frame.request.URL.absoluteString ?: @"", @"message": message, @"type": @"confirm", @"hasBrowserHandler": @YES, @"defaultPrompt": @"" }];
-    completionHandler(NO);
-    [self emit:@"page.javascriptDialogClosed" parameters:@{ @"result": @NO, @"userInput": @"" }];
 }
 
 - (void)webView:(WKWebView *)webView runJavaScriptTextInputPanelWithPrompt:(NSString *)prompt defaultText:(NSString *)defaultText initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(NSString *))completionHandler
 {
+    _dialogType = @"prompt";
+    _dialogCompletion = ^(BOOL accept, NSString *text) { completionHandler(accept ? text : nil); };
     [self emit:@"page.javascriptDialogOpening" parameters:@{ @"url": frame.request.URL.absoluteString ?: @"", @"message": prompt, @"type": @"prompt", @"hasBrowserHandler": @YES, @"defaultPrompt": defaultText ?: @"" }];
-    completionHandler(nil);
-    [self emit:@"page.javascriptDialogClosed" parameters:@{ @"result": @NO, @"userInput": @"" }];
 }
 
 - (void)webView:(WKWebView *)webView runOpenPanelWithParameters:(WKOpenPanelParameters *)parameters initiatedByFrame:(WKFrameInfo *)frame completionHandler:(void (^)(NSArray<NSURL *> *))completionHandler

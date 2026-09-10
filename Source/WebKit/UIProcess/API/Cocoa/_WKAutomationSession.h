@@ -28,6 +28,7 @@
 #import <Foundation/Foundation.h>
 
 @class _WKAutomationSessionConfiguration;
+@class WKWebView;
 @protocol _WKAutomationSessionDelegate;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -45,6 +46,12 @@ WK_CLASS_AVAILABLE(macos(10.12), ios(10.0))
 @property (nonatomic, readonly, getter=isSimulatingUserInteraction) BOOL simulatingUserInteraction WK_API_AVAILABLE(macos(10.13.4), ios(11.3));
 
 - (instancetype)initWithConfiguration:(_WKAutomationSessionConfiguration *)configuration NS_DESIGNATED_INITIALIZER;
+
+// In-process transport for native automation hosts. Clearing the handler ends
+// the local connection and terminates the session.
+- (void)setLocalMessageHandler:(nullable void (^)(NSString *))handler;
+- (void)dispatchLocalMessage:(NSString *)message;
+- (NSString *)registerWebView:(WKWebView *)webView;
 
 - (void)terminate WK_API_AVAILABLE(macos(10.14), ios(12.0));
 

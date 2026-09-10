@@ -29,15 +29,67 @@
 #import "AutomationSessionClient.h"
 #import "WKAPICast.h"
 #import "WKProcessPool.h"
+#import "WKWebViewInternal.h"
+#import "WebPageProxy.h"
+#import <JavaScriptCore/InspectorFrontendChannel.h>
+#import <wtf/BlockPtr.h>
+#import <wtf/TZoneMallocInlines.h>
 #import "WebAutomationSession.h"
 #import "_WKAutomationSessionConfiguration.h"
 #import "_WKAutomationSessionDelegate.h"
 #import <WebCore/WebCoreObjCExtras.h>
 #import <wtf/WeakObjCPtr.h>
 
+#if ENABLE(REMOTE_INSPECTOR)
+namespace WebKit {
+class LocalAutomationFrontendChannel final : public Inspector::FrontendChannel {
+    WTF_MAKE_TZONE_ALLOCATED(LocalAutomationFrontendChannel);
+public:
+    explicit LocalAutomationFrontendChannel(void (^handler)(NSString *))
+        : m_handler(makeBlockPtr(handler)) { }
+    ConnectionType connectionType() const final { return ConnectionType::Local; }
+    void sendMessageToFrontend(const String& message) final { m_handler(message.createNSString().get()); }
+private:
+    BlockPtr<void(NSString *)> m_handler;
+};
+WTF_MAKE_TZONE_ALLOCATED_IMPL(LocalAutomationFrontendChannel);
+}
+#endif
+
 @implementation _WKAutomationSession {
+#if ENABLE(REMOTE_INSPECTOR)
+    std::unique_ptr<WebKit::LocalAutomationFrontendChannel> _localChannel;
+#endif
     RetainPtr<_WKAutomationSessionConfiguration> _configuration;
     WeakObjCPtr<id <_WKAutomationSessionDelegate>> _delegate;
+}
+
+- (void)setLocalMessageHandler:(void (^)(NSString *))handler
+{
+#if ENABLE(REMOTE_INSPECTOR)
+    if (_localChannel) {
+        protect(*_session)->disconnect(*_localChannel);
+        _localChannel = nullptr;
+    }
+    if (handler) {
+        _localChannel = makeUnique<WebKit::LocalAutomationFrontendChannel>(handler);
+        protect(*_session)->connect(*_localChannel);
+    }
+#endif
+}
+
+- (void)dispatchLocalMessage:(NSString *)message
+{
+#if ENABLE(REMOTE_INSPECTOR)
+    if (_localChannel)
+        protect(*_session)->dispatchMessageFromRemote(String(message));
+#endif
+}
+
+- (NSString *)registerWebView:(WKWebView *)webView
+{
+    RefPtr page = [webView _page].get();
+    return page ? protect(*_session)->handleForWebPageProxy(*page).createNSString().autorelease() : nil;
 }
 
 - (instancetype)init
@@ -62,6 +114,12 @@
     if (WebCoreObjCScheduleDeallocateOnMainRunLoop(_WKAutomationSession.class, self))
         return;
 
+#if ENABLE(REMOTE_INSPECTOR)
+    if (_localChannel) {
+        protect(*_session)->disconnect(*_localChannel);
+        _localChannel = nullptr;
+    }
+#endif
     protect(*_session)->setClient(nullptr);
     SUPPRESS_UNCOUNTED_ARG _session->~WebAutomationSession();
 
