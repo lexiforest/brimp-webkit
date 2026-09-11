@@ -1027,10 +1027,18 @@ void InspectorInstrumentation::interceptRequestImpl(InstrumentingAgents& instrum
         networkAgent->interceptRequest(loader, WTF::move(handler));
 }
 
-void InspectorInstrumentation::interceptResponseImpl(InstrumentingAgents& instrumentingAgents, const ResourceResponse& response, ResourceLoaderIdentifier identifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&& handler)
+void InspectorInstrumentation::didReceiveInterceptedResponseBody(const LocalFrame* frame, ResourceLoaderIdentifier identifier, const FragmentedSharedBuffer* data, bool finished, bool failed)
+{
+    if (auto* agents = instrumentingAgents(frame)) {
+        if (CheckedPtr agent = agents->enabledNetworkAgent())
+            agent->didReceiveInterceptedResponseBody(identifier, data, finished, failed);
+    }
+}
+
+void InspectorInstrumentation::interceptResponseImpl(InstrumentingAgents& instrumentingAgents, const ResourceResponse& response, ResourceLoaderIdentifier identifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&& handler, Function<void()>&& failHandler)
 {
     if (CheckedPtr networkAgent = instrumentingAgents.enabledNetworkAgent())
-        networkAgent->interceptResponse(response, identifier, WTF::move(handler));
+        networkAgent->interceptResponse(response, identifier, WTF::move(handler), WTF::move(failHandler));
 }
 
 // JavaScriptCore InspectorDebuggerAgent should know Console MessageTypes.

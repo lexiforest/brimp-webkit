@@ -28,9 +28,11 @@
 #include "ResourceLoader.h"
 #include "ResourceRequest.h"
 #include "ResourceResponse.h"
+#include "SharedBuffer.h"
 #include <JavaScriptCore/ContentSearchUtilities.h>
 #include <JavaScriptCore/RegularExpression.h>
 #include <wtf/CompletionHandler.h>
+#include <wtf/text/Base64.h>
 #include <wtf/TZoneMalloc.h>
 
 namespace Inspector {
@@ -89,14 +91,51 @@ class PendingInterceptResponse {
     WTF_MAKE_TZONE_ALLOCATED(PendingInterceptResponse);
     WTF_MAKE_NONCOPYABLE(PendingInterceptResponse);
 public:
-    PendingInterceptResponse(const WebCore::ResourceResponse& originalResponse, CompletionHandler<void(const WebCore::ResourceResponse&, RefPtr<WebCore::FragmentedSharedBuffer>)>&& completionHandler)
+    PendingInterceptResponse(const WebCore::ResourceResponse& originalResponse, CompletionHandler<void(const WebCore::ResourceResponse&, RefPtr<WebCore::FragmentedSharedBuffer>)>&& completionHandler, Function<void()>&& failHandler)
         : m_originalResponse(originalResponse)
         , m_completionHandler(WTF::move(completionHandler))
+        , m_failHandler(WTF::move(failHandler))
     { }
 
     ~PendingInterceptResponse()
     {
         ASSERT(m_responded);
+        for (auto& callback : m_bodyCallbacks)
+            callback({ }, "Intercepted response is no longer available"_s);
+    }
+
+    void receiveBody(const WebCore::FragmentedSharedBuffer* data, bool finished, bool failed)
+    {
+        if (data && m_bodyError.isEmpty()) {
+            if (m_body.size() + data->size() > 32 * 1024 * 1024) {
+                m_bodyError = "Intercepted response exceeds the 32 MiB body limit"_s;
+                m_body.clear();
+            } else
+                m_body.appendVector(data->copyData());
+        }
+        if (failed)
+            m_bodyError = "Intercepted response failed while reading its body"_s;
+        m_bodyComplete |= finished || failed || !m_bodyError.isEmpty();
+        if (m_bodyComplete) {
+            auto callbacks = std::exchange(m_bodyCallbacks, { });
+            auto body = base64EncodeToString(m_body.span());
+            for (auto& callback : callbacks)
+                callback(body, m_bodyError);
+        }
+    }
+
+    void getBody(Function<void(const String&, const String&)>&& callback)
+    {
+        if (m_bodyComplete)
+            callback(base64EncodeToString(m_body.span()), m_bodyError);
+        else
+            m_bodyCallbacks.append(WTF::move(callback));
+    }
+
+    void fail()
+    {
+        m_failHandler();
+        respondWithOriginalResponse();
     }
 
     WebCore::ResourceResponse originalResponse() { return m_originalResponse; }
@@ -120,7 +159,12 @@ public:
 private:
     WebCore::ResourceResponse m_originalResponse;
     CompletionHandler<void(const WebCore::ResourceResponse&, RefPtr<WebCore::FragmentedSharedBuffer>)> m_completionHandler;
+    Function<void()> m_failHandler;
     bool m_responded { false };
+    bool m_bodyComplete { false };
+    Vector<uint8_t> m_body;
+    String m_bodyError;
+    Vector<Function<void(const String&, const String&)>> m_bodyCallbacks;
 };
 
 } // namespace Inspector

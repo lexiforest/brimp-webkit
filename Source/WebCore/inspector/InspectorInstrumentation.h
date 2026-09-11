@@ -263,7 +263,8 @@ public:
     static bool shouldInterceptRequest(const ResourceLoader&);
     static bool shouldInterceptResponse(const LocalFrame&, const ResourceResponse&);
     static void interceptRequest(ResourceLoader&, Function<void(const ResourceRequest&)>&&);
-    static void interceptResponse(const LocalFrame&, const ResourceResponse&, ResourceLoaderIdentifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&&);
+    static void didReceiveInterceptedResponseBody(const LocalFrame*, ResourceLoaderIdentifier, const FragmentedSharedBuffer*, bool finished, bool failed);
+    static void interceptResponse(const LocalFrame&, const ResourceResponse&, ResourceLoaderIdentifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&&, Function<void()>&&);
 
     static void addMessageToConsole(LocalFrame&, std::unique_ptr<Inspector::ConsoleMessage>);
     static void addMessageToConsole(WorkerOrWorkletGlobalScope&, std::unique_ptr<Inspector::ConsoleMessage>);
@@ -494,7 +495,7 @@ private:
     static bool shouldInterceptRequestImpl(InstrumentingAgents&, const ResourceLoader&);
     static bool shouldInterceptResponseImpl(InstrumentingAgents&, const ResourceResponse&);
     static void interceptRequestImpl(InstrumentingAgents&, ResourceLoader&, Function<void(const ResourceRequest&)>&&);
-    static void interceptResponseImpl(InstrumentingAgents&, const ResourceResponse&, ResourceLoaderIdentifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&&);
+    static void interceptResponseImpl(InstrumentingAgents&, const ResourceResponse&, ResourceLoaderIdentifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&&, Function<void()>&&);
 
     static void addMessageToConsoleImpl(InstrumentingAgents&, std::unique_ptr<Inspector::ConsoleMessage>);
 
@@ -1373,10 +1374,10 @@ inline void InspectorInstrumentation::interceptRequest(ResourceLoader& loader, F
         interceptRequestImpl(*agents, loader, WTF::move(handler));
 }
 
-inline void InspectorInstrumentation::interceptResponse(const LocalFrame& frame, const ResourceResponse& response, ResourceLoaderIdentifier identifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&& handler)
+inline void InspectorInstrumentation::interceptResponse(const LocalFrame& frame, const ResourceResponse& response, ResourceLoaderIdentifier identifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&& handler, Function<void()>&& failHandler)
 {
     ASSERT(InspectorInstrumentation::shouldInterceptResponse(frame, response));
-    interceptResponseImpl(protect(instrumentingAgents(frame)), response, identifier, WTF::move(handler));
+    interceptResponseImpl(protect(instrumentingAgents(frame)), response, identifier, WTF::move(handler), WTF::move(failHandler));
 }
 
 inline void InspectorInstrumentation::didDispatchDOMStorageEvent(Page& page, const String& key, const String& oldValue, const String& newValue, StorageType storageType, const SecurityOrigin& securityOrigin)

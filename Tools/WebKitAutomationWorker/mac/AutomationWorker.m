@@ -4,6 +4,7 @@
 #import "AutomationWorker.h"
 
 #import "AutomationPage.h"
+#import "AutomationFetch.h"
 #import <Carbon/Carbon.h>
 #import <Network/Network.h>
 #import <WebKit/WKFrameInfoPrivate.h>
@@ -40,6 +41,7 @@
     NSMutableDictionary<NSString *, NSMutableDictionary<NSString *, WKJSHandle *> *> *_handlesByTarget;
     NSMutableDictionary<NSString *, NSString *> *_targetIdentifiersBySession;
     NSMutableDictionary *_sessionsByRequest;
+    NSMutableDictionary<NSString *, AutomationFetch *> *_fetchByTarget;
 }
 - (void)captureScreenshot:(NSDictionary *)parameters webView:(WKWebView *)webView contentSize:(NSSize)contentSize identifier:(id)identifier;
 - (void)captureFullPageScreenshot:(NSDictionary *)parameters webView:(WKWebView *)webView contentSize:(NSSize)contentSize identifier:(id)identifier;
@@ -98,6 +100,7 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
     _handlesByTarget = [NSMutableDictionary dictionary];
     _targetIdentifiersBySession = [NSMutableDictionary dictionary];
     _sessionsByRequest = [NSMutableDictionary dictionary];
+    _fetchByTarget = [NSMutableDictionary dictionary];
     return self;
 }
 
@@ -149,7 +152,7 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
 {
     if (![NSJSONSerialization isValidJSONObject:message])
         return;
-    NSData *data = [NSJSONSerialization dataWithJSONObject:message options:0 error:nil];
+    NSData *data = [NSJSONSerialization dataWithJSONObject:message options:NSJSONWritingWithoutEscapingSlashes error:nil];
     uint32_t networkLength = htonl(data.length);
     NSMutableData *frame = [NSMutableData dataWithBytes:&networkLength length:sizeof(networkLength)];
     [frame appendData:data];
@@ -250,6 +253,10 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
         configuration.navigatorWebDriverEnabled = NO;
         _automationSession = [[_WKAutomationSession alloc] initWithConfiguration:configuration];
         _automationSession.sessionIdentifier = [NSUUID UUID].UUIDString;
+        __weak AutomationWorker *weakWorker = self;
+        [_automationSession setLocalMessageHandler:^(NSString *text) {
+            [weakWorker receiveAutomationMessage:text];
+        }];
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
         [_processPool _setAutomationSession:_automationSession];
@@ -275,6 +282,9 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
             [self replyTo:identifier error:@"Unknown browserContextId"];
             return;
         }
+        for (AutomationFetch *fetch in _fetchByTarget.allValues.copy)
+            [fetch close];
+        [_fetchByTarget removeAllObjects];
         for (AutomationPage *page in _pages.allValues.copy)
             [page close];
         [_pages removeAllObjects];
@@ -308,6 +318,11 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
             [weakSelf emitEvent:event parameters:eventParameters targetIdentifier:targetIdentifier];
         }];
         _pages[targetIdentifier] = page;
+        AutomationFetch *fetch = [[AutomationFetch alloc] initWithSession:_automationSession webView:page.webView eventHandler:^(NSString *method, NSDictionary *params) {
+            [weakSelf emitEvent:method parameters:params targetIdentifier:targetIdentifier];
+        }];
+        _fetchByTarget[targetIdentifier] = fetch;
+        page.fetch = fetch;
         _handlesByTarget[targetIdentifier] = [NSMutableDictionary dictionary];
         [page loadURLString:url];
         [self replyTo:identifier result:@{ @"targetId": targetIdentifier }];
@@ -335,6 +350,8 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
             [self replyTo:identifier error:@"Unknown targetId"];
             return;
         }
+        [_fetchByTarget[targetIdentifier] close];
+        [_fetchByTarget removeObjectForKey:targetIdentifier];
         [_handlesByTarget removeObjectForKey:targetIdentifier];
         [_pages removeObjectForKey:targetIdentifier];
         for (NSString *sessionIdentifier in _targetIdentifiersBySession.allKeys.copy) {
@@ -362,6 +379,13 @@ static NSDictionary *frameTreeForNode(_WKFrameTreeNode *node)
     WKWebView *webView = page.webView;
     if (!webView) {
         [self replyTo:identifier error:@"No active page"];
+        return;
+    }
+    if ([method hasPrefix:@"Fetch."] || [method isEqualToString:@"IO.read"] || [method isEqualToString:@"IO.close"]) {
+        [_fetchByTarget[targetIdentifier] handleCommand:method parameters:parameters reply:^(NSDictionary *result, NSString *error) {
+            if (error) [self replyTo:identifier error:error];
+            else [self replyTo:identifier result:result];
+        }];
         return;
     }
     if ([method hasSuffix:@".enable"] || [method hasSuffix:@".disable"]) {
@@ -1065,6 +1089,22 @@ static unsigned short keyCodeForCDP(NSDictionary *parameters)
     return @{ @"type": @"string", @"value": [value description], @"description": [value description] };
 }
 
+- (void)receiveAutomationMessage:(NSString *)text
+{
+    NSDictionary *message = [NSJSONSerialization JSONObjectWithData:[text dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+    if ([message[@"method"] isEqual:@"Automation.receiveInspectorMessage"]) {
+        NSDictionary *params = message[@"params"];
+        NSDictionary *inner = [NSJSONSerialization JSONObjectWithData:[params[@"message"] dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
+        for (AutomationFetch *fetch in _fetchByTarget.allValues.copy) {
+            if ([fetch.browsingContextHandle isEqual:params[@"browsingContextHandle"]])
+                [fetch receiveMessage:inner];
+        }
+    } else if (message[@"id"]) {
+        for (AutomationFetch *fetch in _fetchByTarget.allValues.copy)
+            [fetch receiveTransportResponse:message];
+    }
+}
+
 - (void)emitEvent:(NSString *)event parameters:(NSDictionary *)parameters targetIdentifier:(NSString *)targetIdentifier
 {
     if (!targetIdentifier.length || !_pages[targetIdentifier])
@@ -1082,7 +1122,7 @@ static unsigned short keyCodeForCDP(NSDictionary *parameters)
             @"network.loadingFailed": @"Network.loadingFailed",
         };
     });
-    NSString *method = methods[event];
+    NSString *method = [event hasPrefix:@"Fetch."] ? event : methods[event];
     if (!method)
         return;
     for (NSString *sessionIdentifier in _targetIdentifiersBySession) {

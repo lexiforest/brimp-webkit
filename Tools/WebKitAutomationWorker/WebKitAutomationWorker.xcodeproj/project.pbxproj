@@ -11,6 +11,7 @@
 		A10000020000000000000001 /* AutomationPage.m in Sources */ = {isa = PBXBuildFile; fileRef = A10000130000000000000001 /* AutomationPage.m */; };
 		A10000030000000000000001 /* AutomationWorker.m in Sources */ = {isa = PBXBuildFile; fileRef = A10000150000000000000001 /* AutomationWorker.m */; };
 		A10000040000000000000001 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000170000000000000001 /* WebKit.framework */; };
+		A20000010000000000000001 /* AutomationFetch.m in Sources */ = {isa = PBXBuildFile; fileRef = A20000020000000000000001 /* AutomationFetch.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -25,6 +26,8 @@
 		A10000180000000000000001 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		A10000190000000000000001 /* DebugRelease.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = DebugRelease.xcconfig; sourceTree = "<group>"; };
 		A100001A0000000000000001 /* WebKitAutomationWorker.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = WebKitAutomationWorker.xcconfig; sourceTree = "<group>"; };
+		A20000020000000000000001 /* AutomationFetch.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AutomationFetch.m; sourceTree = "<group>"; };
+		A20000030000000000000001 /* AutomationFetch.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AutomationFetch.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -53,6 +56,8 @@
 			isa = PBXGroup;
 			children = (
 				A10000110000000000000001 /* main.m */,
+				A20000020000000000000001 /* AutomationFetch.m */,
+				A20000030000000000000001 /* AutomationFetch.h */,
 				A10000120000000000000001 /* AutomationPage.h */,
 				A10000130000000000000001 /* AutomationPage.m */,
 				A10000140000000000000001 /* AutomationWorker.h */,
@@ -142,6 +147,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000010000000000000001 /* main.m in Sources */,
+				A20000010000000000000001 /* AutomationFetch.m in Sources */,
 				A10000020000000000000001 /* AutomationPage.m in Sources */,
 				A10000030000000000000001 /* AutomationWorker.m in Sources */,
 			);

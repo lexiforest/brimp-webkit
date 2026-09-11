@@ -45,9 +45,14 @@ void InspectorInstrumentationWebKit::interceptRequestInternal(ResourceLoader& lo
     InspectorInstrumentation::interceptRequest(loader, WTF::move(handler));
 }
 
-void InspectorInstrumentationWebKit::interceptResponseInternal(const LocalFrame& frame, const ResourceResponse& response, ResourceLoaderIdentifier identifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&& handler)
+void InspectorInstrumentationWebKit::interceptResponseInternal(const LocalFrame& frame, const ResourceResponse& response, ResourceLoaderIdentifier identifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&& handler, Function<void()>&& failHandler)
 {
-    InspectorInstrumentation::interceptResponse(frame, response, identifier, WTF::move(handler));
+    InspectorInstrumentation::interceptResponse(frame, response, identifier, WTF::move(handler), WTF::move(failHandler));
+}
+
+void InspectorInstrumentationWebKit::didReceiveInterceptedResponseBody(const LocalFrame* frame, ResourceLoaderIdentifier identifier, const FragmentedSharedBuffer* data, bool finished, bool failed)
+{
+    InspectorInstrumentation::didReceiveInterceptedResponseBody(frame, identifier, data, finished, failed);
 }
 
 } // namespace WebCore

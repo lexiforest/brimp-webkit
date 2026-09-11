@@ -286,6 +286,11 @@ void WebResourceLoader::didReceiveResponse(ResourceResponse&& response, PrivateR
     if (InspectorInstrumentationWebKit::shouldInterceptResponse(frame.get(), response)) {
         auto interceptedRequestIdentifier = *coreLoader->identifier();
         m_interceptController.beginInterceptingResponse(interceptedRequestIdentifier);
+        // Keep delivery to the document paused, but allow the network body to be
+        // collected for Inspector clients inspecting an intercepted response.
+        if (policyDecisionCompletionHandler)
+            policyDecisionCompletionHandler();
+
         InspectorInstrumentationWebKit::interceptResponse(frame.get(), response, interceptedRequestIdentifier, [this, protectedThis = Ref { *this }, interceptedRequestIdentifier, policyDecisionCompletionHandler = WTF::move(policyDecisionCompletionHandler)](const ResourceResponse& inspectorResponse, RefPtr<FragmentedSharedBuffer> overrideData) mutable {
             RefPtr coreLoader = m_coreLoader;
             if (!m_coreLoader || !coreLoader->identifier()) {
@@ -314,6 +319,9 @@ void WebResourceLoader::didReceiveResponse(ResourceResponse&& response, PrivateR
                     coreLoader->didFinishLoading(emptyMetrics);
                 }
             });
+        }, [this, protectedThis = Ref { *this }] {
+            if (RefPtr loader = m_coreLoader)
+                loader->cancel(ResourceError("WebKitAutomation"_s, 0, loader->url(), "Request aborted by Fetch"_s, ResourceError::Type::Cancellation));
         });
         return;
     }
@@ -328,6 +336,7 @@ void WebResourceLoader::didReceiveData(IPC::SharedBufferReference&& data, uint64
     ASSERT_WITH_MESSAGE(!m_isProcessingNetworkResponse, "Network process should not send data until we've validated the response");
 
     if (m_interceptController.isIntercepting(*coreLoader->identifier())) [[unlikely]] {
+        InspectorInstrumentationWebKit::didReceiveInterceptedResponseBody(coreLoader->frame(), *coreLoader->identifier(), data.unsafeBuffer().get(), false, false);
         m_interceptController.defer(*coreLoader->identifier(), [this, protectedThis = Ref { *this }, buffer = WTF::move(data), bytesTransferredOverNetwork]() mutable {
             if (m_coreLoader)
                 didReceiveData(WTF::move(buffer), bytesTransferredOverNetwork);
@@ -373,6 +382,7 @@ void WebResourceLoader::didFinishResourceLoad(NetworkLoadMetrics&& networkLoadMe
     WEBRESOURCELOADER_RELEASE_LOG(WebResourceLoaderDidFinishResourceLoad, static_cast<uint64_t>(m_numBytesReceived));
 
     if (m_interceptController.isIntercepting(*coreLoader->identifier())) [[unlikely]] {
+        InspectorInstrumentationWebKit::didReceiveInterceptedResponseBody(coreLoader->frame(), *coreLoader->identifier(), nullptr, true, false);
         m_interceptController.defer(*coreLoader->identifier(), [this, protectedThis = Ref { *this }, networkLoadMetrics = WTF::move(networkLoadMetrics)]() mutable {
             if (m_coreLoader)
                 didFinishResourceLoad(WTF::move(networkLoadMetrics));
@@ -440,6 +450,7 @@ void WebResourceLoader::didFailResourceLoad(const ResourceError& error)
     WEBRESOURCELOADER_RELEASE_LOG(WebResourceLoaderDidFailResourceLoad);
 
     if (m_interceptController.isIntercepting(*coreLoader->identifier())) [[unlikely]] {
+        InspectorInstrumentationWebKit::didReceiveInterceptedResponseBody(coreLoader->frame(), *coreLoader->identifier(), nullptr, false, true);
         m_interceptController.defer(*coreLoader->identifier(), [this, protectedThis = Ref { *this }, error]() mutable {
             if (m_coreLoader)
                 didFailResourceLoad(error);
@@ -487,6 +498,20 @@ void WebResourceLoader::didReceiveResource(ShareableResource::Handle&& handle)
                 protect(page->diagnosticLoggingClient())->logDiagnosticMessage(WebCore::DiagnosticLoggingKeys::internalErrorKey(), WebCore::DiagnosticLoggingKeys::createSharedBufferFailedKey(), WebCore::ShouldSample::No);
         }
         coreLoader->didFail(internalError(coreLoader->request().url()));
+        return;
+    }
+
+    if (m_interceptController.isIntercepting(*coreLoader->identifier())) [[unlikely]] {
+        InspectorInstrumentationWebKit::didReceiveInterceptedResponseBody(coreLoader->frame(), *coreLoader->identifier(), buffer.get(), true, false);
+        m_interceptController.defer(*coreLoader->identifier(), [this, protectedThis = Ref { *this }, buffer = buffer.releaseNonNull()]() mutable {
+            if (!m_coreLoader)
+                return;
+            Ref loader = *m_coreLoader;
+            if (auto size = buffer->size())
+                loader->didReceiveData(WTF::move(buffer), size, DataPayloadWholeResource);
+            if (m_coreLoader)
+                loader->didFinishLoading(NetworkLoadMetrics());
+        });
         return;
     }
 

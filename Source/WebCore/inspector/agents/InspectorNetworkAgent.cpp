@@ -91,6 +91,7 @@
 #include <wtf/JSONValues.h>
 #include <wtf/Lock.h>
 #include <wtf/RefPtr.h>
+#include <wtf/RunLoop.h>
 #include <wtf/Stopwatch.h>
 #include <wtf/TZoneMallocInlines.h>
 #include <wtf/URL.h>
@@ -925,6 +926,21 @@ Inspector::Protocol::ErrorStringOr<void> InspectorNetworkAgent::setExtraHTTPHead
 
 void InspectorNetworkAgent::getResponseBody(const Inspector::Protocol::Network::RequestId& requestId, Ref<GetResponseBodyCallback>&& callback)
 {
+    if (auto* pending = m_pendingInterceptResponses.get(requestId)) {
+        pending->getBody([callback = WTF::move(callback)](const String& body, const String& error) {
+            if (!error.isEmpty()) {
+                // Resolving an interception can destroy it while another
+                // Inspector command is being dispatched. Report the pending
+                // body's error after that command releases its request ID.
+                RunLoop::mainSingleton().dispatch([callback = callback.copyRef(), error = String { error }] {
+                    callback->sendFailure(error);
+                });
+            } else
+                callback->sendSuccess(body, true);
+        });
+        return;
+    }
+
     NetworkResourcesData::ResourceData const* resourceData = m_resourcesData->data(requestId);
     if (!resourceData) {
         callback->sendFailure("Missing resource for given requestId"_s);
@@ -1131,6 +1147,12 @@ bool InspectorNetworkAgent::shouldInterceptResponse(const ResourceResponse& resp
     return shouldIntercept(response.url(), Inspector::Protocol::Network::NetworkStage::Response);
 }
 
+void InspectorNetworkAgent::didReceiveInterceptedResponseBody(ResourceLoaderIdentifier identifier, const FragmentedSharedBuffer* data, bool finished, bool failed)
+{
+    if (auto* pending = m_pendingInterceptResponses.get(IdentifiersFactory::requestId(identifier.toUInt64())))
+        pending->receiveBody(data, finished, failed);
+}
+
 void InspectorNetworkAgent::interceptRequest(ResourceLoader& loader, Function<void(const ResourceRequest&)>&& handler)
 {
     ASSERT(m_enabled);
@@ -1145,7 +1167,7 @@ void InspectorNetworkAgent::interceptRequest(ResourceLoader& loader, Function<vo
     m_frontendDispatcher->requestIntercepted(requestId, buildObjectForResourceRequest(loader.request(), &loader));
 }
 
-void InspectorNetworkAgent::interceptResponse(const ResourceResponse& response, ResourceLoaderIdentifier identifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&& handler)
+void InspectorNetworkAgent::interceptResponse(const ResourceResponse& response, ResourceLoaderIdentifier identifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&& handler, Function<void()>&& failHandler)
 {
     ASSERT(m_enabled);
     ASSERT(m_interceptionEnabled);
@@ -1157,7 +1179,7 @@ void InspectorNetworkAgent::interceptResponse(const ResourceResponse& response, 
         return;
     }
 
-    m_pendingInterceptResponses.set(requestId, makeUnique<PendingInterceptResponse>(response, WTF::move(handler)));
+    m_pendingInterceptResponses.set(requestId, makeUnique<PendingInterceptResponse>(response, WTF::move(handler), WTF::move(failHandler)));
 
     auto resourceResponse = buildObjectForResourceResponse(response, nullptr);
     if (!resourceResponse)
@@ -1212,7 +1234,7 @@ Inspector::Protocol::ErrorStringOr<void> InspectorNetworkAgent::interceptWithReq
         }
         request.setHTTPHeaderFields(WTF::move(explicitHeaders));
     }
-    if (!!postData) {
+    if (!postData.isNull()) {
         auto buffer = base64Decode(postData);
         if (!buffer)
             return makeUnexpected("Unable to decode given postData"_s);
@@ -1334,6 +1356,11 @@ static ResourceError::Type NODELETE toResourceErrorType(Inspector::Protocol::Net
 
 Inspector::Protocol::ErrorStringOr<void> InspectorNetworkAgent::interceptRequestWithError(const Inspector::Protocol::Network::RequestId& requestId, Inspector::Protocol::Network::ResourceErrorType errorType)
 {
+    if (auto pendingResponse = m_pendingInterceptResponses.take(requestId)) {
+        pendingResponse->fail();
+        return { };
+    }
+
     auto pendingRequest = m_pendingInterceptRequests.take(requestId);
     if (!pendingRequest)
         return makeUnexpected("Missing pending intercept request for given requestId"_s);

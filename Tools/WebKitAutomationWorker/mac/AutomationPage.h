@@ -3,6 +3,7 @@
 #import <Cocoa/Cocoa.h>
 
 @class WKProcessPool;
+@class AutomationFetch;
 @class WKWebView;
 @class WKWebsiteDataStore;
 
@@ -10,6 +11,7 @@ typedef void (^AutomationPageEventHandler)(NSString *, NSDictionary *);
 
 @interface AutomationPage : NSObject
 
+@property (nonatomic, strong) AutomationFetch *fetch;
 @property (nonatomic, readonly) NSWindow *window;
 @property (nonatomic, readonly) WKWebView *webView;
 

@@ -61,6 +61,51 @@ BRIMP_TEST_WEBKIT_WORKER=/absolute/path/to/WebKitBuild/Release/WebKitAutomationW
   uv run --with pytest python -m pytest crates/brimp/tests/test_webkit_automation.py -q
 ```
 
+## Fetch interception
+
+The worker implements the standard Fetch domain through WebKit's Inspector
+network agents, using an in-process automation transport. It requires the
+matching WebKit frameworks from this fork, including intercepted-body buffering.
+The controller forwards Fetch commands and events to the selected page session.
+
+`Fetch.enable` accepts URL wildcard patterns, resource types, Request/Response
+stages, and `handleAuthRequests`. Requests stay paused until continued, fulfilled,
+or failed. `Fetch.disable` resumes outstanding interceptions. Re-enabling updates
+patterns; new page-process targets are configured before their loads resume.
+
+- `Fetch.continueRequest` supports URL, method, base64 upload, and header overrides,
+  including per-request `interceptResponse`.
+- `Fetch.fulfillRequest` accepts base64 bodies and textual or binary response
+  headers. Omitting the body preserves it at the response stage and uses an empty
+  body at the request stage.
+- `Fetch.continueResponse` preserves the body while applying response overrides.
+- `Fetch.failRequest` works at either stage. Request-stage reasons map to WebKit's
+  error categories; response-stage failure cancels the load.
+- `Fetch.continueWithAuth` handles HTTP Basic/Digest challenges with default
+  handling, cancellation, or credentials.
+- `Fetch.getResponseBody` returns the buffered response as base64.
+- `Fetch.takeResponseBodyAsStream` returns a page-scoped handle for `IO.read` and
+  `IO.close`. Reads are sequential; closing a stream cancels any pending read.
+  After taking a stream, the request must be fulfilled with a body or failed.
+
+Response bodies are buffered while delivery to the page remains paused, with a
+32 MiB retrieval limit. Stream reads currently wait for the complete body; reads
+return at most 1 MiB per chunk. Response header changes also wait for the original
+body. Duplicate header names are not supported. Interception follows WebKit's
+page network agents; service-worker-owned requests and intermediate redirect
+responses/redirected request hops are not covered. Fetch IDs
+are independent of native Network event IDs, so `requestPaused.networkId` is
+omitted. Clients must keep handling events while a script or body read is pending.
+Request priority is currently reported as `Medium`; resource types follow
+WebKit's classification.
+
+Run the native Fetch regressions from Brimp with the same worker environment as
+above, using `crates/brimp/tests/test_webkit_fetch.py`.
+
+The repository's `cdp.txt` retains only commands in the official CDP browser and
+JavaScript schemas. Its third column describes this worker/controller's support;
+`implemented` may cover only a documented subset of a command's parameters.
+
 ## Proxies
 
 On macOS 14 and later, `Target.createBrowserContext` accepts `proxyServer`:

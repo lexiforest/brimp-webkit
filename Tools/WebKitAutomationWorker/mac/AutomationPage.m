@@ -2,6 +2,7 @@
 #import "config.h"
 #endif
 #import "AutomationPage.h"
+#import "AutomationFetch.h"
 
 #import <WebKit/WKFrameInfo.h>
 #import <WebKit/WKNavigationAction.h>
@@ -92,6 +93,8 @@
 
 - (void)close
 {
+    [self.fetch close];
+    self.fetch = nil;
     [self handleJavaScriptDialogWithAccept:NO promptText:@""];
     [_documentScripts removeAllObjects];
     _webView.navigationDelegate = nil;
@@ -150,6 +153,12 @@ static NSString *navigationIdentifier(WKNavigation *navigation)
 {
     preferences.allowsJSHandleCreationInPageWorld = YES;
     decisionHandler(WKNavigationActionPolicyAllow, preferences);
+}
+
+- (void)webView:(WKWebView *)webView didReceiveAuthenticationChallenge:(NSURLAuthenticationChallenge *)challenge completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition, NSURLCredential *))completionHandler
+{
+    if (![self.fetch handleAuthenticationChallenge:challenge completionHandler:completionHandler])
+        completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, nil);
 }
 
 - (void)webView:(WKWebView *)webView didStartProvisionalNavigation:(WKNavigation *)navigation

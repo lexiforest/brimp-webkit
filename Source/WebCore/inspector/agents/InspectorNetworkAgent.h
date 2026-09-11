@@ -137,7 +137,8 @@ public:
     bool willIntercept(const ResourceRequest&);
     bool shouldInterceptRequest(const ResourceLoader&);
     bool shouldInterceptResponse(const ResourceResponse&);
-    void interceptResponse(const ResourceResponse&, ResourceLoaderIdentifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&&);
+    void interceptResponse(const ResourceResponse&, ResourceLoaderIdentifier, CompletionHandler<void(const ResourceResponse&, RefPtr<FragmentedSharedBuffer>)>&&, Function<void()>&&);
+    void didReceiveInterceptedResponseBody(ResourceLoaderIdentifier, const FragmentedSharedBuffer*, bool finished, bool failed);
     void interceptRequest(ResourceLoader&, Function<void(const ResourceRequest&)>&&);
 
     void searchOtherRequests(const JSC::Yarr::RegularExpression&, Ref<JSON::ArrayOf<Inspector::Protocol::Page::SearchResult>>&, const HashSet<String>& alreadySearchedURLs);
