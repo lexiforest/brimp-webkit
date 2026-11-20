@@ -94,3 +94,19 @@ def test_manifest_detects_corruption_missing_files_and_added_files(build, tmp_pa
     (stage / "unexpected").write_text("extra file")
     with pytest.raises(RuntimeError, match="manifest"):
         packaging.verify_package(stage)
+
+
+def test_jsc_public_headers_use_cmake_staging_directory(tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "jsc_package", Path(__file__).with_name("package-jsc-sdk.py")
+    )
+    jsc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(jsc)
+    build = tmp_path / "build"
+    headers = build / "JavaScriptCore/Headers/JavaScriptCore"
+    headers.mkdir(parents=True)
+    for name in jsc.PUBLIC_HEADERS:
+        (headers / name).write_text(name)
+    output = tmp_path / "sdk"
+    jsc.copy_headers(build, output)
+    assert (output / "include/JavaScriptCore/JSBase.h").read_text() == "JSBase.h"

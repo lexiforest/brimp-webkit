@@ -46,6 +46,9 @@ It does not assert that every browser-visible property matches Safari.
 Run as a normal user after installing the SDK:
 
 ```sh
+python3 -m venv /tmp/webkit-tests
+. /tmp/webkit-tests/bin/activate
+python -m pip install 'pytest>=8,<10' 'websockets>=12,<17' 'h2>=4,<5'
 bash Tools/Scripts/linux-webkit/test.sh /path/to/build-workspace/sdk/webkit-curl \
     /path/to/build-workspace/sdk/curl-impersonate-2.3.2
 ```
@@ -59,10 +62,13 @@ machine, with build and test logs under `/opt/brimp/logs`. The final browser run
 passed all 15 tests in 15.20 seconds. Its TLS ClientHello and HTTP/2 settings
 match the pinned curl-impersonate CLI's `safari270` profile. The installed WebKit
 library has no dynamic dependency on libcurl, libssl or libcrypto, and does not
-export the checked curl/BoringSSL entry points. The SDK requires Ubuntu system dependencies and its original installation
-prefix. The release workflow installs it at `/opt/brimp/sdk/webkit-curl`,
-archives it, hides the original SDK and build products, and runs all 15 tests
-against the extracted archive at that prefix.
+export the checked curl/BoringSSL entry points. The SDK requires Ubuntu system dependencies. Release builds now use Ubuntu 24.04
+and Clang 18 so downstream packages can target manylinux 2.39. Runtime layout
+version 1 supports relocation: set WEBKIT_EXEC_PATH and WEBKIT_INJECTED_BUNDLE_PATH
+to the relocated subprocess/bundle directories and add the runtime root read-only
+to the WebKit context sandbox. The release workflow hides the original SDK/build
+products and runs all 15 tests from a different extracted location. The historical
+Ubuntu 26.04 measurements above describe the earlier development build.
 
 The Linux transport reads `WEBKIT_CURL_CA_BUNDLE` at startup when a custom
 trust store is needed. TLS verification remains enabled by default.

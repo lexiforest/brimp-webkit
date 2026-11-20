@@ -88,11 +88,8 @@ def copy_outputs(build_dir, output_dir, platform):
         )
 
 
-def copy_headers(build_dir, output_dir, platform):
-    if platform == "macos":
-        source = build_dir / "JavaScriptCore.framework" / "Headers"
-    else:
-        source = build_dir / "JavaScriptCore" / "Headers" / "JavaScriptCore"
+def copy_headers(build_dir, output_dir):
+    source = build_dir / "JavaScriptCore" / "Headers" / "JavaScriptCore"
 
     destination = output_dir / "include" / "JavaScriptCore"
     destination.mkdir(parents=True)
@@ -270,7 +267,7 @@ def main():
     output_dir.mkdir(parents=True)
 
     copy_outputs(build_dir, output_dir, args.platform)
-    copy_headers(build_dir, output_dir, args.platform)
+    copy_headers(build_dir, output_dir)
     copy_vcpkg_runtime(build_dir, output_dir, args.platform)
     copy_vcpkg_licenses(build_dir, output_dir)
     if args.platform == "linux":

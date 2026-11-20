@@ -192,8 +192,9 @@ def package_linux(root, installed, output, curl_build, curl_source, tag, commit)
     metadata = {
         "tag": tag,
         "commit": commit,
-        "target": "linux-x64-ubuntu-26.04",
+        "target": "linux-x64-ubuntu-24.04",
         "install_prefix": str(installed),
+        "runtime_layout_version": 1,
         "curl_impersonate_commit": curl_commit,
         "curl_profile": "safari270",
     }
@@ -202,12 +203,14 @@ def package_linux(root, installed, output, curl_build, curl_source, tag, commit)
     )
     (output / "README.md").write_text(f"""# WebKitGTK Linux x64 SDK
 
-Built for Ubuntu 26.04 x86_64 with curl-impersonate and private static BoringSSL.
-Install the CONTENTS of this directory at `{installed}`. This SDK has a fixed
-installation prefix: subprocess paths and pkg-config files embed that path.
-Keep `lib/`, `libexec/`, `include/` and `share/` together at that prefix.
+Built for Ubuntu 24.04 x86_64 with curl-impersonate and private static BoringSSL.
+The development pkg-config files use `{installed}`. Runtime consumers may relocate
+this SDK: set WEBKIT_EXEC_PATH to its libexec/webkitgtk-6.0 directory,
+WEBKIT_INJECTED_BUNDLE_PATH to lib/webkitgtk-6.0/injected-bundle, and
+LD_LIBRARY_PATH to lib. Add the runtime root read-only to the WebKit context
+sandbox before creating pages. Keep the browser sandbox enabled.
 
-System dependencies are not bundled. On Ubuntu 26.04, install
+System dependencies are not bundled. On Ubuntu 24.04, install
 `libwebkitgtk-6.0-4`, `libwebkitgtk-6.0-dev`, `bubblewrap` and `xdg-dbus-proxy`
 to obtain the runtime and development dependencies. Select this SDK explicitly:
 

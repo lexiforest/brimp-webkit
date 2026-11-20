@@ -17,6 +17,9 @@ export PKG_CONFIG_PATH
 libraries=$(pkg-config --variable=libdir webkitgtk-6.0)
 export LD_LIBRARY_PATH="$libraries${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export WEBKIT_EXPECTED_LIBRARY_DIR="$libraries/"
+export WEBKIT_RUNTIME_ROOT="$sdk"
+export WEBKIT_EXEC_PATH="$sdk/libexec/webkitgtk-6.0"
+export WEBKIT_INJECTED_BUNDLE_PATH="$sdk/lib/webkitgtk-6.0/injected-bundle"
 export WEBKIT_SMOKE_BINARY="$temporary/browser-smoke"
 export CURL_IMPERSONATE_BINARY="$curl_sdk/bin/curl-impersonate"
 export LIBGL_ALWAYS_SOFTWARE=1

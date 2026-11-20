@@ -29,7 +29,7 @@ cp -a "$work/build/curl/deps/src/boringssl/include/openssl" "$curl_sdk/include/"
 
 cmake -S "$webkit_source" -B "$work/build/webkit-curl" -G Ninja \
     -DPORT=GTK -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_C_COMPILER=clang-21 -DCMAKE_CXX_COMPILER=clang++-21 \
+    -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
     -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DTRY_USE_LD_LLD=ON -DUSE_LD_LLD=ON -DCURL_IMPERSONATE_ROOT="$curl_sdk" \
     -DCMAKE_INSTALL_PREFIX="$work/sdk/webkit-curl" \

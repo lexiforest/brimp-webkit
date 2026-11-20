@@ -137,7 +137,12 @@ int main(int argc, char **argv)
         webkit_network_session_set_proxy_settings(session, WEBKIT_NETWORK_PROXY_MODE_CUSTOM, proxy);
         webkit_network_proxy_settings_free(proxy);
     }
-    GtkWidget *view = g_object_new(WEBKIT_TYPE_WEB_VIEW, "network-session", session, NULL);
+    WebKitWebContext *context = webkit_web_context_new();
+    const char *runtime_root = g_getenv("WEBKIT_RUNTIME_ROOT");
+    if (runtime_root)
+        webkit_web_context_add_path_to_sandbox(context, runtime_root, TRUE);
+    GtkWidget *view = g_object_new(WEBKIT_TYPE_WEB_VIEW, "web-context", context, "network-session", session, NULL);
+    g_object_unref(context);
     GtkWidget *window = gtk_window_new();
     gtk_window_set_child(GTK_WINDOW(window), view);
     gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);

@@ -75,7 +75,7 @@ jobs:
             manylinux_image: quay.io/pypa/manylinux_2_28_aarch64
             build_dir: WebKitBuild/JSCOnly/Release
           - name: windows-x64
-            runner: windows-2025
+            runner: windows-2022
             os: windows
             arch: x64
             build_dir: WebKitBuild/Release
@@ -143,7 +143,7 @@ jobs:
           $ninjaDirectory = Split-Path $ninja
           $vswhere = Join-Path ${env:ProgramFiles(x86)} `
             "Microsoft Visual Studio\Installer\vswhere.exe"
-          $vs = & $vswhere -latest -products * `
+          $vs = & $vswhere -latest -products * -version "[17.0,18.0)" `
             -property installationPath
           $devShell = Join-Path $vs `
             "Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
@@ -273,7 +273,7 @@ jobs:
           $ninja = (Get-Command ninja.exe -ErrorAction Stop).Source
           $vswhere = Join-Path ${env:ProgramFiles(x86)} `
             "Microsoft Visual Studio\Installer\vswhere.exe"
-          $vs = & $vswhere -latest -products * `
+          $vs = & $vswhere -latest -products * -version "[17.0,18.0)" `
             -property installationPath
           $devShell = Join-Path $vs `
             "Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
@@ -386,9 +386,9 @@ jobs:
           if-no-files-found: ignore
 
   webkit-linux:
-    name: WebKit Linux x64 (Ubuntu 26.04)
+    name: WebKit Linux x64 (Ubuntu 24.04)
     needs: validate
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 360
     env:
       RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
@@ -414,10 +414,14 @@ jobs:
           sudo apt-get update
           sudo apt-get build-dep -y --no-install-recommends webkit2gtk
           sudo apt-get install -y --no-install-recommends \
-            clang-21 lld-21 ccache cmake ninja-build unifdef nasm \
-            xvfb xauth dbus-x11 python3-pytest python3-websockets python3-h2 \
+            clang-18 lld-18 ccache cmake ninja-build unifdef nasm \
+            xvfb xauth dbus-x11 python3-venv \
             curl pkg-config git ca-certificates bubblewrap xdg-dbus-proxy
           sudo apt-get clean
+          python3 -m venv "$RUNNER_TEMP/webkit-tests"
+          "$RUNNER_TEMP/webkit-tests/bin/python" -m pip install \
+            'pytest>=8,<10' 'websockets>=12,<17' 'h2>=4,<5'
+          echo "$RUNNER_TEMP/webkit-tests/bin" >> "$GITHUB_PATH"
           sudo mkdir -p /opt/brimp
           sudo chown "$(id -u):$(id -g)" /opt/brimp
           df -h /opt/brimp
@@ -432,7 +436,7 @@ jobs:
       - name: Package Linux SDK
         shell: bash
         run: |
-          package="WebKit-$RELEASE_TAG-linux-x64-ubuntu-26.04"
+          package="WebKit-$RELEASE_TAG-linux-x64-ubuntu-24.04"
           python3 Tools/Scripts/package-webkit-sdk.py \
             --platform linux --build-dir /opt/brimp/sdk/webkit-curl \
             --output-dir "$RUNNER_TEMP/$package" \
@@ -444,24 +448,25 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          package="WebKit-$RELEASE_TAG-linux-x64-ubuntu-26.04"
+          package="WebKit-$RELEASE_TAG-linux-x64-ubuntu-24.04"
           sdk=/opt/brimp/sdk/webkit-curl
           products=/opt/brimp/build/webkit-curl
           mv "$sdk" "$sdk.hidden"
           mv "$products" "$products.hidden"
-          trap 'rm -rf "$sdk"; mv "$sdk.hidden" "$sdk"; mv "$products.hidden" "$products"' EXIT
-          mkdir "$sdk"
-          tar -xzf "$package.tar.gz" -C "$sdk" --strip-components=1
-          # GTK embeds this install prefix; test the archive at that same prefix.
-          # The runner is unprivileged and the browser sandbox stays enabled.
-          bash Tools/Scripts/linux-webkit/test.sh "$sdk" \
+          relocated="$RUNNER_TEMP/relocated-webkit"
+          trap 'rm -rf "$relocated"; mv "$sdk.hidden" "$sdk"; mv "$products.hidden" "$products"' EXIT
+          mkdir "$relocated"
+          tar -xzf "$package.tar.gz" -C "$relocated" --strip-components=1
+          sed -i "s|$sdk|$relocated|g" "$relocated"/lib/pkgconfig/*.pc
+          # Exercise runtime relocation as an unprivileged user with sandboxing enabled.
+          bash Tools/Scripts/linux-webkit/test.sh "$relocated" \
             /opt/brimp/sdk/curl-impersonate-2.3.2 \
             2>&1 | tee "$RUNNER_TEMP/webkit-linux-tests.log"
       - name: Upload Linux WebKit archive
         uses: actions/upload-artifact@v7
         with:
           name: WebKit-linux-x64
-          path: WebKit-${{ env.RELEASE_TAG }}-linux-x64-ubuntu-26.04.tar.gz
+          path: WebKit-${{ env.RELEASE_TAG }}-linux-x64-ubuntu-24.04.tar.gz
           if-no-files-found: error
           compression-level: 0
       - name: Upload Linux build and test logs
