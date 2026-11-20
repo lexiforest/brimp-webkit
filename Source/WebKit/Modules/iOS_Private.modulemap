@@ -2625,8 +2625,8 @@ framework module WebKit_Private [system] {
     export *
   }
 
-  explicit module _WKAutomationSessionPrivateForTesting {
-    header "_WKAutomationSessionPrivateForTesting.h"
+  explicit module _WKAutomationSessionLocalConnection {
+    header "_WKAutomationSessionLocalConnection.h"
     export *
   }
 

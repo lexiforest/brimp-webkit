@@ -490,7 +490,7 @@ private:
 #endif
 
     // Web Inspector backend passthrough: clients with the
-    // shouldEnableInspectorTesting capability can issue
+    // shouldEnableInspectorProtocol capability can issue
     // Automation.sendInspectorMessage to forward an Inspector backend
     // command into a page's WebPageInspectorController; the controller's
     // responses and events come back as Automation.receiveInspectorMessage.

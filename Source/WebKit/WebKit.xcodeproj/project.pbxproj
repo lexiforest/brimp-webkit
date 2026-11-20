@@ -2348,7 +2348,7 @@
 		C1E123BA20A11573002646F4 /* PDFContextMenu.h in Headers */ = {isa = PBXBuildFile; fileRef = C1E123B920A11572002646F4 /* PDFContextMenu.h */; };
 		C3EE0FDA0234F84002CAF7FB /* ProxyingNetworkAgent.h in Headers */ = {isa = PBXBuildFile; fileRef = EB43329193327F9D842EE004 /* ProxyingNetworkAgent.h */; };
 		C3EE0FDA0234F84002CAF7FC /* ProxyingPageAgent.h in Headers */ = {isa = PBXBuildFile; fileRef = EB43329193327F9D842EE005 /* ProxyingPageAgent.h */; };
-		C4450D54570C4383A25745E6 /* _WKAutomationSessionPrivateForTesting.h in Headers */ = {isa = PBXBuildFile; fileRef = BC35BB81026B48A6A3BDAA80 /* _WKAutomationSessionPrivateForTesting.h */; settings = {ATTRIBUTES = (Private, ); }; };
+		C4450D54570C4383A25745E6 /* _WKAutomationSessionLocalConnection.h in Headers */ = {isa = PBXBuildFile; fileRef = BC35BB81026B48A6A3BDAA80 /* _WKAutomationSessionLocalConnection.h */; settings = {ATTRIBUTES = (Private, ); }; };
 		C517388112DF8F4F00EE3F47 /* DragControllerAction.h in Headers */ = {isa = PBXBuildFile; fileRef = C517388012DF8F4F00EE3F47 /* DragControllerAction.h */; };
 		C54256B518BEC18C00DE4179 /* WKDateTimeInputControl.h in Headers */ = {isa = PBXBuildFile; fileRef = C54256AF18BEC18B00DE4179 /* WKDateTimeInputControl.h */; };
 		C54256B718BEC18C00DE4179 /* WKFormPeripheral.h in Headers */ = {isa = PBXBuildFile; fileRef = C54256B118BEC18B00DE4179 /* WKFormPeripheral.h */; };
@@ -7805,7 +7805,7 @@
 		A188D2E32B6B0F4E00E65A08 /* WKVisibilityPropagationView.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = WKVisibilityPropagationView.mm; sourceTree = "<group>"; };
 		A190E9402F3DB703009615AD /* WKAVContentSource.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = WKAVContentSource.h; sourceTree = "<group>"; };
 		A190E9412F3DB703009615AD /* WKAVContentSource.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = WKAVContentSource.mm; sourceTree = "<group>"; };
-		A197A4B2903C423281A84E16 /* _WKAutomationSessionTesting.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = _WKAutomationSessionTesting.mm; sourceTree = "<group>"; };
+		A197A4B2903C423281A84E16 /* _WKAutomationSessionLocalConnection.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = _WKAutomationSessionLocalConnection.mm; sourceTree = "<group>"; };
 		A19DD3BF1D07D16800AC823B /* _WKWebViewPrintFormatterInternal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = _WKWebViewPrintFormatterInternal.h; sourceTree = "<group>"; };
 		A19E65B02F3C62A600A94318 /* WKSExperienceController+Transitions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WKSExperienceController+Transitions.swift"; path = "DerivedSources/WebKit/WKSExperienceController+Transitions.swift"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1A207432D8A7A92003B1A13 /* LinearMediaKit.swiftinterface */ = {isa = PBXFileReference; lastKnownFileType = text; path = LinearMediaKit.swiftinterface; sourceTree = "<group>"; };
@@ -8118,7 +8118,7 @@
 		BC33DD671238464600360F3F /* APINumber.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = APINumber.h; sourceTree = "<group>"; };
 		BC33E0CF12408E8600360F3F /* InjectedBundleRangeHandle.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = InjectedBundleRangeHandle.h; sourceTree = "<group>"; };
 		BC33E0D012408E8600360F3F /* InjectedBundleRangeHandle.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = InjectedBundleRangeHandle.cpp; sourceTree = "<group>"; };
-		BC35BB81026B48A6A3BDAA80 /* _WKAutomationSessionPrivateForTesting.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = _WKAutomationSessionPrivateForTesting.h; sourceTree = "<group>"; };
+		BC35BB81026B48A6A3BDAA80 /* _WKAutomationSessionLocalConnection.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = _WKAutomationSessionLocalConnection.h; sourceTree = "<group>"; };
 		BC39C4331626366F008BC689 /* WKDOMRange.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = WKDOMRange.mm; sourceTree = "<group>"; };
 		BC39C4341626366F008BC689 /* WKDOMRange.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = WKDOMRange.h; sourceTree = "<group>"; };
 		BC3DE46615A91763008D26FC /* com.apple.WebKit.WebContent.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = com.apple.WebKit.WebContent.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -12862,8 +12862,8 @@
 				99788ACA1F421DCA00C08000 /* _WKAutomationSessionConfiguration.mm */,
 				990D28A81C6404B000986977 /* _WKAutomationSessionDelegate.h */,
 				990D28AF1C65203900986977 /* _WKAutomationSessionInternal.h */,
-				BC35BB81026B48A6A3BDAA80 /* _WKAutomationSessionPrivateForTesting.h */,
-				A197A4B2903C423281A84E16 /* _WKAutomationSessionTesting.mm */,
+				BC35BB81026B48A6A3BDAA80 /* _WKAutomationSessionLocalConnection.h */,
+				A197A4B2903C423281A84E16 /* _WKAutomationSessionLocalConnection.mm */,
 				5C4609E222430E4C009943C2 /* _WKContentRuleListAction.h */,
 				5C4609E322430E4D009943C2 /* _WKContentRuleListAction.mm */,
 				5C4609E422430E4D009943C2 /* _WKContentRuleListActionInternal.h */,
@@ -17975,7 +17975,7 @@
 				99788ACB1F421DDA00C08000 /* _WKAutomationSessionConfiguration.h in Headers */,
 				990D28AC1C6420CF00986977 /* _WKAutomationSessionDelegate.h in Headers */,
 				990D28B11C65208D00986977 /* _WKAutomationSessionInternal.h in Headers */,
-				C4450D54570C4383A25745E6 /* _WKAutomationSessionPrivateForTesting.h in Headers */,
+				C4450D54570C4383A25745E6 /* _WKAutomationSessionLocalConnection.h in Headers */,
 				CD89ACBD2EA696A300C76423 /* _WKCaptionStyleMenuController.h in Headers */,
 				97C476282ECD33A6004D1492 /* _WKCaptionStyleMenuControllerInternal.h in Headers */,
 				5C4609E7224317B4009943C2 /* _WKContentRuleListAction.h in Headers */,

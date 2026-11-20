@@ -152,7 +152,7 @@ public:
     ResourceData const* data(WebCore::ResourceLoaderIdentifier);
     void clear();
 
-    Expected<std::tuple<String, bool>, String> getResponseBody(WebCore::ResourceLoaderIdentifier);
+    Expected<std::tuple<String, bool>, String> getResponseBody(WebCore::ResourceLoaderIdentifier, bool raw);
 
 private:
     ResourceData* resourceDataForId(WebCore::ResourceLoaderIdentifier);

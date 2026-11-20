@@ -78,7 +78,7 @@ public:
     CommandResult<void> enable() final;
     CommandResult<void> disable() final;
     CommandResult<void> setExtraHTTPHeaders(Ref<JSON::Object>&&) final;
-    void getResponseBody(const Protocol::Network::RequestId&, Ref<GetResponseBodyCallback>&&) final;
+    void getResponseBody(const Protocol::Network::RequestId&, std::optional<bool>&&, Ref<GetResponseBodyCallback>&&) final;
     CommandResult<void> setResourceCachingDisabled(bool) final;
     CommandResult<void> setClearResourceDataOnNavigate(bool) final;
     void loadResource(const Protocol::Network::FrameId&, const String& url, Ref<LoadResourceCallback>&&) final;

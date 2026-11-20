@@ -80,7 +80,7 @@ typedef NS_ENUM(NSInteger, _WKAutomationSessionWebExtensionResourceOptions) {
 
 - (void)_automationSession:(_WKAutomationSession *)automationSession performCommandForWebView:(WKWebView *)webView commandName:(NSString *)commandName arguments:(NSString *)arguments completionHandler:(void(^)(NSString * _Nullable))completionHandler WK_API_AVAILABLE(macos(27.0), ios(27.0), visionos(27.0));
 
-- (BOOL)_automationSessionShouldEnableInspectorTesting:(_WKAutomationSession *)automationSession WK_API_AVAILABLE(macos(27.0), ios(27.0), visionos(27.0));
+- (BOOL)_automationSessionShouldEnableInspectorProtocol:(_WKAutomationSession *)automationSession WK_API_AVAILABLE(macos(27.0), ios(27.0), visionos(27.0));
 
 @end
 

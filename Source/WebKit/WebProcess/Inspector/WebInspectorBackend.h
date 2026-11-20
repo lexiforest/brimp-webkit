@@ -96,7 +96,7 @@ public:
 
     void enableNetworkInstrumentation();
     void disableNetworkInstrumentation();
-    void getResponseBody(WebCore::ResourceLoaderIdentifier, CompletionHandler<void(String content, bool base64Encoded, String errorString)>&&);
+    void getResponseBody(WebCore::ResourceLoaderIdentifier, bool raw, CompletionHandler<void(String content, bool base64Encoded, String errorString)>&&);
 
     void enablePageInstrumentation();
     void disablePageInstrumentation();

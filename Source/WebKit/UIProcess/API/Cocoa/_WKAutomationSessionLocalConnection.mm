@@ -24,7 +24,7 @@
  */
 
 #import "config.h"
-#import "_WKAutomationSessionPrivateForTesting.h"
+#import "_WKAutomationSessionLocalConnection.h"
 
 #if ENABLE(REMOTE_INSPECTOR)
 
@@ -41,16 +41,12 @@
 
 namespace WebKit {
 
-// A FrontendChannel that funnels every outbound JSON-RPC message into a
-// caller-supplied Objective-C block. Used by API tests as a stand-in for
-// the real RemoteInspector transport so a test can observe what the
-// automation backend would send back to the driver. Lifetime is managed
-// by the Objective-C wrapper @_WKAutomationSessionTestChannel below; the
-// channel disconnects from the session before deallocation.
-class TestFrontendChannel final : public Inspector::FrontendChannel {
-    WTF_MAKE_TZONE_ALLOCATED(TestFrontendChannel);
+// Local embedding transport. The wrapper disconnects before deallocation;
+// the application owns framing and delivery of messages outside this process.
+class LocalFrontendChannel final : public Inspector::FrontendChannel {
+    WTF_MAKE_TZONE_ALLOCATED(LocalFrontendChannel);
 public:
-    explicit TestFrontendChannel(void (^handler)(NSString *))
+    explicit LocalFrontendChannel(void (^handler)(NSString *))
         : m_handler(makeBlockPtr(handler))
     {
     }
@@ -67,18 +63,18 @@ private:
     BlockPtr<void(NSString *)> m_handler;
 };
 
-WTF_MAKE_TZONE_ALLOCATED_IMPL(TestFrontendChannel);
+WTF_MAKE_TZONE_ALLOCATED_IMPL(LocalFrontendChannel);
 
 } // namespace WebKit
 
-@interface _WKAutomationSessionTestChannel : NSObject {
+@interface _WKAutomationSessionLocalChannel : NSObject {
 @public
-    std::unique_ptr<WebKit::TestFrontendChannel> _channel;
+    std::unique_ptr<WebKit::LocalFrontendChannel> _channel;
     WeakObjCPtr<_WKAutomationSession> _session;
 }
 @end
 
-@implementation _WKAutomationSessionTestChannel
+@implementation _WKAutomationSessionLocalChannel
 - (void)dealloc
 {
     RetainPtr session = _session.get();
@@ -90,11 +86,11 @@ WTF_MAKE_TZONE_ALLOCATED_IMPL(TestFrontendChannel);
 }
 @end
 
-static void *kAutomationTestChannelKey = &kAutomationTestChannelKey;
+static void *kAutomationLocalChannelKey = &kAutomationLocalChannelKey;
 
-@implementation _WKAutomationSession (PrivateForTesting)
+@implementation _WKAutomationSession (LocalConnection)
 
-- (NSString *)_registerWebViewForTesting:(WKWebView *)webView
+- (NSString *)_registerWebView:(WKWebView *)webView
 {
     RefPtr page = [webView _page].get();
     if (!page)
@@ -103,35 +99,35 @@ static void *kAutomationTestChannelKey = &kAutomationTestChannelKey;
     return session->handleForWebPageProxy(*page).createNSString().autorelease();
 }
 
-- (void)_setMessageToFrontendHandlerForTesting:(void (^)(NSString *))handler
+- (void)_setMessageToFrontendHandler:(void (^)(NSString *))handler
 {
     Ref session = downcast<WebKit::WebAutomationSession>([self _apiObject]);
 
-    // Tear down any previously installed test channel first. The wrapper's
+    // Tear down any previously installed local channel first. The wrapper's
     // dealloc disconnects the channel from the session, so just dropping the
     // associated object would race; do the disconnect deterministically.
-    RetainPtr existing = (_WKAutomationSessionTestChannel *)objc_getAssociatedObject(self, kAutomationTestChannelKey);
+    RetainPtr existing = (_WKAutomationSessionLocalChannel *)objc_getAssociatedObject(self, kAutomationLocalChannelKey);
     if (existing) {
         if (existing->_channel)
             session->disconnect(*existing->_channel);
         existing->_channel = nullptr;
         existing->_session = nil;
-        objc_setAssociatedObject(self, kAutomationTestChannelKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(self, kAutomationLocalChannelKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 
     if (!handler)
         return;
 
-    RetainPtr wrapper = adoptNS([[_WKAutomationSessionTestChannel alloc] init]);
-    wrapper->_channel = makeUnique<WebKit::TestFrontendChannel>(handler);
+    RetainPtr wrapper = adoptNS([[_WKAutomationSessionLocalChannel alloc] init]);
+    wrapper->_channel = makeUnique<WebKit::LocalFrontendChannel>(handler);
     wrapper->_session = self;
 
     session->connect(*wrapper->_channel);
 
-    objc_setAssociatedObject(self, kAutomationTestChannelKey, wrapper.get(), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, kAutomationLocalChannelKey, wrapper.get(), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-- (void)_dispatchMessageFromRemoteForTesting:(NSString *)message
+- (void)_dispatchMessageFromRemote:(NSString *)message
 {
     Ref session = downcast<WebKit::WebAutomationSession>([self _apiObject]);
     session->dispatchMessageFromRemote(String(message));

@@ -398,10 +398,10 @@ void WebInspectorBackend::removeInstrumentationForFrame(FrameIdentifier frameID)
     m_framePageAgentProxies.remove(frameID);
 }
 
-void WebInspectorBackend::getResponseBody(ResourceLoaderIdentifier resourceID, CompletionHandler<void(String content, bool base64Encoded, String errorString)>&& completionHandler)
+void WebInspectorBackend::getResponseBody(ResourceLoaderIdentifier resourceID, bool raw, CompletionHandler<void(String content, bool base64Encoded, String errorString)>&& completionHandler)
 {
     CheckedRef resourceDataStore = m_resourceDataStore.get();
-    auto result = resourceDataStore->getResponseBody(resourceID);
+    auto result = resourceDataStore->getResponseBody(resourceID, raw);
     if (result.has_value()) {
         auto& [content, base64Encoded] = result.value();
         completionHandler(content, base64Encoded, String());

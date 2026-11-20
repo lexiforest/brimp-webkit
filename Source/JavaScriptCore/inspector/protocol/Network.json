@@ -205,7 +205,8 @@
             "description": "Returns content served for the given request.",
             "async": true,
             "parameters": [
-                { "name": "requestId", "$ref": "RequestId", "description": "Identifier of the network request to get content for." }
+                { "name": "requestId", "$ref": "RequestId", "description": "Identifier of the network request to get content for." },
+                { "name": "raw", "type": "boolean", "optional": true, "description": "Return the retained response bytes as base64 without text decoding. Fails if raw bytes are unavailable." }
             ],
             "returns": [
                 { "name": "body", "type": "string", "description": "Response body." },

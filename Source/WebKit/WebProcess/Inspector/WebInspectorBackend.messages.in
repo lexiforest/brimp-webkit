@@ -55,5 +55,5 @@ messages -> WebInspectorBackend {
     # asks each process only for the frames it hosts. See webkit.org/b/308896.
     GetFrameResourceData(Vector<WebCore::FrameIdentifier> frameIDs) -> (Vector<std::pair<WebCore::FrameIdentifier, Inspector::FrameResourceData>> resourcesByFrame) Async
 
-    GetResponseBody(WebCore::ResourceLoaderIdentifier resourceID) -> (String content, bool base64Encoded, String errorString) Async
+    GetResponseBody(WebCore::ResourceLoaderIdentifier resourceID, bool raw) -> (String content, bool base64Encoded, String errorString) Async
 }

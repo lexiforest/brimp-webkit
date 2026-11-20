@@ -63,7 +63,7 @@ AutomationSessionClient::AutomationSessionClient(id <_WKAutomationSessionDelegat
     m_delegateMethods.unloadWebExtension = [delegate respondsToSelector:@selector(_automationSession:unloadWebExtensionWithIdentifier:completionHandler:)];
 #endif
     m_delegateMethods.performApplicationCommand = [delegate respondsToSelector:@selector(_automationSession:performCommandForWebView:commandName:arguments:completionHandler:)];
-    m_delegateMethods.shouldEnableInspectorTesting = [delegate respondsToSelector:@selector(_automationSessionShouldEnableInspectorTesting:)];
+    m_delegateMethods.shouldEnableInspectorProtocol = [delegate respondsToSelector:@selector(_automationSessionShouldEnableInspectorProtocol:)];
 }
 
 void AutomationSessionClient::didDisconnectFromRemote(WebAutomationSession& session)
@@ -181,11 +181,11 @@ void AutomationSessionClient::performApplicationCommand(WebAutomationSession& se
         completionHandler(nullString());
 }
 
-bool AutomationSessionClient::shouldEnableInspectorTesting(WebAutomationSession& session)
+bool AutomationSessionClient::shouldEnableInspectorProtocol(WebAutomationSession& session)
 {
-    if (!m_delegateMethods.shouldEnableInspectorTesting)
+    if (!m_delegateMethods.shouldEnableInspectorProtocol)
         return false;
-    return [m_delegate.get() _automationSessionShouldEnableInspectorTesting:RetainPtr { wrapper(session) }];
+    return [m_delegate.get() _automationSessionShouldEnableInspectorProtocol:RetainPtr { wrapper(session) }];
 }
 
 bool AutomationSessionClient::isShowingJavaScriptDialogOnPage(WebAutomationSession& session, WebPageProxy& page)

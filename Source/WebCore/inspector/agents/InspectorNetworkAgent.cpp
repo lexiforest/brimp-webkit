@@ -922,11 +922,27 @@ Inspector::Protocol::ErrorStringOr<void> InspectorNetworkAgent::setExtraHTTPHead
     return { };
 }
 
-void InspectorNetworkAgent::getResponseBody(const Inspector::Protocol::Network::RequestId& requestId, Ref<GetResponseBodyCallback>&& callback)
+void InspectorNetworkAgent::getResponseBody(const Inspector::Protocol::Network::RequestId& requestId, std::optional<bool>&& raw, Ref<GetResponseBodyCallback>&& callback)
 {
     NetworkResourcesData::ResourceData const* resourceData = m_resourcesData->data(requestId);
     if (!resourceData) {
         callback->sendFailure("Missing resource for given requestId"_s);
+        return;
+    }
+
+    if (raw.value_or(false)) {
+        RefPtr buffer = resourceData->buffer();
+        if (!buffer && resourceData->cachedResource())
+            buffer = resourceData->cachedResource()->resourceBuffer();
+        if (buffer) {
+            callback->sendSuccess(base64EncodeToString(buffer->makeContiguous()->span()), true);
+            return;
+        }
+        if (resourceData->hasContent() && resourceData->base64Encoded()) {
+            callback->sendSuccess(resourceData->content(), true);
+            return;
+        }
+        callback->sendFailure("Raw response bytes are unavailable or were evicted"_s);
         return;
     }
 

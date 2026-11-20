@@ -298,11 +298,19 @@ void BackendResourceDataStore::clear()
     m_contentSize = 0;
 }
 
-Expected<std::tuple<String, bool>, String> BackendResourceDataStore::getResponseBody(ResourceLoaderIdentifier resourceID)
+Expected<std::tuple<String, bool>, String> BackendResourceDataStore::getResponseBody(ResourceLoaderIdentifier resourceID, bool raw)
 {
     ResourceData const* resourceData = data(resourceID);
     if (!resourceData)
         return makeUnexpected("Missing resource for given requestId"_s);
+
+    if (raw) {
+        if (RefPtr buffer = resourceData->buffer())
+            return std::tuple<String, bool> { base64EncodeToString(buffer->makeContiguous()->span()), true };
+        if (resourceData->hasContent() && resourceData->base64Encoded())
+            return std::tuple<String, bool> { resourceData->content(), true };
+        return makeUnexpected("Raw response bytes are unavailable or were evicted"_s);
+    }
 
     if (resourceData->hasContent())
         return std::tuple<String, bool> { resourceData->content(), resourceData->base64Encoded() };

@@ -288,7 +288,7 @@ CommandResult<void> ProxyingNetworkAgent::setExtraHTTPHeaders(Ref<JSON::Object>&
     return { };
 }
 
-void ProxyingNetworkAgent::getResponseBody(const Protocol::Network::RequestId& requestId, Ref<GetResponseBodyCallback>&& callback)
+void ProxyingNetworkAgent::getResponseBody(const Protocol::Network::RequestId& requestId, std::optional<bool>&& raw, Ref<GetResponseBodyCallback>&& callback)
 {
     auto parsed = IdentifierRegistry::parseProtocolRequestId(requestId);
     if (!parsed) {
@@ -320,7 +320,7 @@ void ProxyingNetworkAgent::getResponseBody(const Protocol::Network::RequestId& r
     }
 
     targetProcess->sendWithAsyncReply(
-        Messages::WebInspectorBackend::GetResponseBody { resourceID },
+        Messages::WebInspectorBackend::GetResponseBody { resourceID, raw.value_or(false) },
         [callback = WTF::move(callback)](String content, bool base64Encoded, String errorString) mutable {
             if (!errorString.isEmpty())
                 callback->sendFailure(errorString);

@@ -89,7 +89,7 @@ public:
     Inspector::Protocol::ErrorStringOr<void> enable() override;
     Inspector::Protocol::ErrorStringOr<void> disable() final;
     Inspector::Protocol::ErrorStringOr<void> setExtraHTTPHeaders(Ref<JSON::Object>&&) final;
-    void getResponseBody(const Inspector::Protocol::Network::RequestId&, Ref<GetResponseBodyCallback>&&) final;
+    void getResponseBody(const Inspector::Protocol::Network::RequestId&, std::optional<bool>&&, Ref<GetResponseBodyCallback>&&) final;
     Inspector::Protocol::ErrorStringOr<void> setResourceCachingDisabled(bool) final;
     Inspector::Protocol::ErrorStringOr<void> setClearResourceDataOnNavigate(bool) final;
     void loadResource(const Inspector::Protocol::Network::FrameId&, const String& url, Ref<LoadResourceCallback>&&) final;

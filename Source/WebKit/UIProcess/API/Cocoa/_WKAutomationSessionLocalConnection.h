@@ -29,28 +29,26 @@
 
 NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 
-/// Testing-only SPI that lets in-process API tests drive the Automation
-/// backend without a RemoteInspector transport. Not intended for production
-/// clients; the surface exists solely to exercise WebAutomationSession's
-/// dispatch path (and downstream Inspector backend round-trips) from unit
-/// tests in TestWebKitAPI.
-@interface _WKAutomationSession (PrivateForTesting)
+/// Private embedding interface for a local Automation protocol client.
+/// The embedding application owns its transport and must connect and dispatch
+/// on the main run loop. No listening port or RemoteInspector service is required.
+@interface _WKAutomationSession (LocalConnection)
 
 /// Register the given WKWebView as a browsing context for this session and
 /// return the handle. The session's process pool must already include the
 /// web view's process. Subsequent Automation commands referencing the
 /// returned handle will resolve to this WKWebView.
-- (NSString *)_registerWebViewForTesting:(WKWebView *)webView;
+- (NSString *)_registerWebView:(WKWebView *)webView;
 
 /// Install a block that captures every outbound JSON-RPC message the
 /// session would otherwise send through its FrontendChannel (responses
 /// and events). Replaces any previously installed handler. Passing nil
-/// detaches the test channel.
-- (void)_setMessageToFrontendHandlerForTesting:(nullable void (^)(NSString *message))handler;
+/// detaches the local channel.
+- (void)_setMessageToFrontendHandler:(nullable void (^)(NSString *message))handler;
 
 /// Drive an inbound JSON-RPC message into the Automation backend dispatcher
 /// as if it arrived from the remote driver. Synchronous.
-- (void)_dispatchMessageFromRemoteForTesting:(NSString *)message;
+- (void)_dispatchMessageFromRemote:(NSString *)message;
 
 @end
 

@@ -58,7 +58,7 @@ private:
 
     void performApplicationCommand(WebKit::WebAutomationSession&, WebKit::WebPageProxy&, const String& commandName, const String& arguments, CompletionHandler<void(const String&)>&&) override;
 
-    bool shouldEnableInspectorTesting(WebKit::WebAutomationSession&) override;
+    bool shouldEnableInspectorProtocol(WebKit::WebAutomationSession&) override;
 
     bool isShowingJavaScriptDialogOnPage(WebAutomationSession&, WebPageProxy&) override;
     void dismissCurrentJavaScriptDialogOnPage(WebAutomationSession&, WebPageProxy&) override;
@@ -92,7 +92,7 @@ private:
         bool loadWebExtensionWithOptions : 1;
         bool unloadWebExtension : 1;
         bool performApplicationCommand : 1;
-        bool shouldEnableInspectorTesting : 1;
+        bool shouldEnableInspectorProtocol : 1;
     } m_delegateMethods;
 };
 

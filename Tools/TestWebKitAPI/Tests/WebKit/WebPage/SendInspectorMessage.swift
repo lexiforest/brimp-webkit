@@ -31,17 +31,17 @@ import WebKit_Private.WKProcessPoolPrivate
 import WebKit_Private._WKAutomationSession
 import WebKit_Private._WKAutomationSessionConfiguration
 import WebKit_Private._WKAutomationSessionDelegate
-import WebKit_Private._WKAutomationSessionPrivateForTesting
+import WebKit_Private._WKAutomationSessionLocalConnection
 
 import struct Swift.String
 
 @MainActor
 private final class TestSendInspectorMessageDelegate: NSObject, @preconcurrency _WKAutomationSessionDelegate {
-    var allowInspectorTesting: Bool = false
+    var allowInspectorProtocol: Bool = false
 
     // swift-format-ignore: NoLeadingUnderscores
-    func _automationSessionShouldEnableInspectorTesting(_ automationSession: _WKAutomationSession) -> Bool {
-        allowInspectorTesting
+    func _automationSessionShouldEnableInspectorProtocol(_ automationSession: _WKAutomationSession) -> Bool {
+        allowInspectorProtocol
     }
 }
 
@@ -180,7 +180,7 @@ private final class SessionFixture {
 
     var captured: [String] { capturedStorage.strings }
 
-    init(allowInspectorTesting: Bool) async throws {
+    init(allowInspectorProtocol: Bool) async throws {
         let page = WebPage()
         self.page = page
 
@@ -189,18 +189,18 @@ private final class SessionFixture {
         self.session = session
 
         let delegate = TestSendInspectorMessageDelegate()
-        delegate.allowInspectorTesting = allowInspectorTesting
+        delegate.allowInspectorProtocol = allowInspectorProtocol
         self.delegate = delegate
         session.delegate = delegate
 
         let processPool = page.backingWebView.configuration.processPool
         processPool._setAutomationSession(session)
 
-        let registeredHandle = session._registerWebView(forTesting: page.backingWebView)
+        let registeredHandle = session._registerWebView(page.backingWebView)
         self.handle = registeredHandle
 
         let messages = capturedStorage
-        session._setMessageToFrontendHandler(forTesting: { message in
+        session._setMessageToFrontendHandler({ message in
             messages.strings.append(message)
         })
 
@@ -220,7 +220,7 @@ private final class SessionFixture {
 struct AutomationSendInspectorMessageTests {
     @Test
     func roundTripTargetSetPauseOnStart() async throws {
-        let fx = try await SessionFixture(allowInspectorTesting: true)
+        let fx = try await SessionFixture(allowInspectorProtocol: true)
 
         let envelope = try makeSendInspectorMessageEnvelope(
             outerId: 1,
@@ -229,7 +229,7 @@ struct AutomationSendInspectorMessageTests {
             method: "Target.setPauseOnStart",
             params: ["pauseOnStart": AnyEncodable(false)]
         )
-        fx.session._dispatchMessageFromRemote(forTesting: envelope)
+        fx.session._dispatchMessageFromRemote(envelope)
 
         await waitForCaptured {
             findMessage(withOuterId: 1, in: fx.captured) != nil
@@ -252,7 +252,7 @@ struct AutomationSendInspectorMessageTests {
 
     @Test
     func deniedWhenGateReturnsFalse() async throws {
-        let fx = try await SessionFixture(allowInspectorTesting: false)
+        let fx = try await SessionFixture(allowInspectorProtocol: false)
 
         let envelope = try makeSendInspectorMessageEnvelope(
             outerId: 2,
@@ -260,7 +260,7 @@ struct AutomationSendInspectorMessageTests {
             innerId: 99,
             method: "Page.getResourceTree"
         )
-        fx.session._dispatchMessageFromRemote(forTesting: envelope)
+        fx.session._dispatchMessageFromRemote(envelope)
 
         await waitForCaptured(maxIterations: 60) {
             findMessage(withOuterId: 2, in: fx.captured) != nil
@@ -273,7 +273,7 @@ struct AutomationSendInspectorMessageTests {
 
     @Test
     func windowNotFoundForUnknownHandle() async throws {
-        let fx = try await SessionFixture(allowInspectorTesting: true)
+        let fx = try await SessionFixture(allowInspectorProtocol: true)
 
         let envelope = try makeSendInspectorMessageEnvelope(
             outerId: 3,
@@ -281,7 +281,7 @@ struct AutomationSendInspectorMessageTests {
             innerId: 99,
             method: "Page.getResourceTree"
         )
-        fx.session._dispatchMessageFromRemote(forTesting: envelope)
+        fx.session._dispatchMessageFromRemote(envelope)
 
         await waitForCaptured(maxIterations: 60) {
             findMessage(withOuterId: 3, in: fx.captured) != nil
