@@ -32,8 +32,10 @@ namespace WebCore {
 #if USE(COORDINATED_GRAPHICS)
 class CoordinatedPlatformLayer;
 using ScrollingPlatformLayer = CoordinatedPlatformLayer;
+using ScrollingPlatformLayerContainer = RefPtr<ScrollingPlatformLayer>;
 #else
 using ScrollingPlatformLayer = PlatformLayer;
+using ScrollingPlatformLayerContainer = PlatformLayerContainer;
 #endif
 
 } // namespace WebCore

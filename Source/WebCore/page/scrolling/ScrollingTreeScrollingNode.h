@@ -152,7 +152,7 @@ public:
 
     virtual String scrollbarStateForOrientation(ScrollbarOrientation) const { return ""_s; }
 
-    Vector<PlatformLayerContainer, 2> hitTestableScrollbarLayers() const;
+    Vector<ScrollingPlatformLayerContainer, 2> hitTestableScrollbarLayers() const;
 
     void scrollbarVisibilityDidChange(ScrollbarOrientation, bool);
     void scrollbarMinimumThumbLengthDidChange(ScrollbarOrientation, int);

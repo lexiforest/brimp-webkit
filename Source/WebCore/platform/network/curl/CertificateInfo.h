@@ -33,6 +33,11 @@
 #include <wtf/persistence/PersistentDecoder.h>
 #include <wtf/persistence/PersistentEncoder.h>
 
+#if PLATFORM(GTK)
+#include <gio/gio.h>
+#include <wtf/glib/GRefPtr.h>
+#endif
+
 namespace WebCore {
 
 class CertificateInfo {
@@ -58,11 +63,22 @@ public:
 
     static Certificate makeCertificate(std::span<const uint8_t>);
 
-    friend bool operator==(const CertificateInfo&, const CertificateInfo&) = default;
+    friend bool operator==(const CertificateInfo& a, const CertificateInfo& b)
+    {
+        return a.m_verificationError == b.m_verificationError && a.m_certificateChain == b.m_certificateChain;
+    }
+#if PLATFORM(GTK)
+    WEBCORE_EXPORT CertificateInfo(GTlsCertificate*, GTlsCertificateFlags);
+    WEBCORE_EXPORT const GRefPtr<GTlsCertificate>& certificate() const;
+    WEBCORE_EXPORT GTlsCertificateFlags tlsErrors() const;
+#endif
 
 private:
     int m_verificationError { 0 };
     CertificateChain m_certificateChain;
+#if PLATFORM(GTK)
+    mutable GRefPtr<GTlsCertificate> m_glibCertificate;
+#endif
 };
 
 } // namespace WebCore

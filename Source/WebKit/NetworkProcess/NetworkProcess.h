@@ -243,7 +243,7 @@ public:
 
     void findPendingDownloadLocation(NetworkDataTask&, ResponseCompletionHandler&&, const WebCore::ResourceResponse&);
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     void prefetchDNS(const String&);
 #endif
 
@@ -614,14 +614,14 @@ private:
     void setProxyConfigData(PAL::SessionID, Vector<std::pair<Vector<uint8_t>, std::optional<WTF::UUID>>>&& proxyConfigurations);
 #endif
     
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     void setIgnoreTLSErrors(PAL::SessionID, bool);
     void userPreferredLanguagesChanged(const Vector<String>&);
     void setNetworkProxySettings(PAL::SessionID, WebCore::SoupNetworkProxySettings&&);
     void setPersistentCredentialStorageEnabled(PAL::SessionID, bool);
 #endif
 
-#if USE(CURL)
+#if USE(CURL) && !PLATFORM(GTK)
     void setNetworkProxySettings(PAL::SessionID, WebCore::CurlProxySettings&&);
 #endif
 

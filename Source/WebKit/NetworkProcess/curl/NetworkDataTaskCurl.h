@@ -110,8 +110,14 @@ private:
 
     RefPtr<WebCore::CurlRequest> m_curlRequest;
     WebCore::ResourceResponse m_response;
+#if PLATFORM(GTK)
+    URL m_proxyURL;
+    URL m_proxyCredentialURL;
+    WebCore::Credential m_proxyCredential;
+#endif
     unsigned m_redirectCount { 0 };
     unsigned m_authFailureCount { 0 };
+    unsigned m_proxyAuthFailureCount { 0 };
 
     bool m_allowOverwriteDownload { false };
     FileSystem::FileHandle m_downloadDestinationFile;

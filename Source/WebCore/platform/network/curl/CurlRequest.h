@@ -36,6 +36,11 @@
 #include <wtf/Noncopyable.h>
 #include <wtf/TZoneMalloc.h>
 
+#if PLATFORM(GTK)
+#include <gio/gio.h>
+#include <wtf/glib/GRefPtr.h>
+#endif
+
 namespace WebCore {
 
 class CurlRequestClient;
@@ -59,6 +64,15 @@ public:
     }
 
     ~CurlRequest() = default;
+#if PLATFORM(GTK)
+    void setProxyResolver(GProxyResolver* resolver) { m_proxyResolver = resolver; }
+    void setProxyCredentials(const URL& url, const String& user, const String& password)
+    {
+        m_proxyCredentialURL = url.isolatedCopy();
+        m_proxyUser = user.isolatedCopy();
+        m_proxyPassword = password.isolatedCopy();
+    }
+#endif
 
     WEBCORE_EXPORT void invalidateClient();
     WEBCORE_EXPORT void setAuthenticationScheme(ProtectionSpace::AuthenticationScheme);
@@ -82,6 +96,12 @@ public:
     WEBCORE_EXPORT void completeDidReceiveResponse();
 
 private:
+#if PLATFORM(GTK)
+    GRefPtr<GProxyResolver> m_proxyResolver;
+    URL m_proxyCredentialURL;
+    String m_proxyUser;
+    String m_proxyPassword;
+#endif
     WEBCORE_EXPORT CurlRequest(const ResourceRequest&, CurlRequestClient*, CaptureNetworkLoadMetrics);
 
     // CheckedPtr interface

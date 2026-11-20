@@ -46,7 +46,7 @@ headers: "NetworkProcessCreationParameters.h" "AuxiliaryProcessCreationParameter
     String containerTemporaryDirectory;
 #endif
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     WebCore::HTTPCookieAcceptPolicy cookieAcceptPolicy
     Vector<String> languages
     std::optional<MemoryPressureHandler::Configuration> memoryPressureHandlerConfiguration

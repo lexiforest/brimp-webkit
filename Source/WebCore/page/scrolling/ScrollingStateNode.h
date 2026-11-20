@@ -70,7 +70,7 @@ public:
     { }
 
     LayerRepresentation(ScrollingPlatformLayer* platformLayer)
-        : m_data(PlatformLayerContainer { platformLayer })
+        : m_data(ScrollingPlatformLayerContainer { platformLayer })
     { }
 
     LayerRepresentation(std::optional<PlatformLayerIdentifier> layerID)
@@ -85,8 +85,8 @@ public:
 
     explicit operator ScrollingPlatformLayer*() const
     {
-        ASSERT(std::holds_alternative<PlatformLayerContainer>(m_data)); // Somehow we can get here without a platform layer: rdar://178173007.
-        if (auto* holder = std::get_if<PlatformLayerContainer>(&m_data))
+        ASSERT(std::holds_alternative<ScrollingPlatformLayerContainer>(m_data)); // Somehow we can get here without a platform layer: rdar://178173007.
+        if (auto* holder = std::get_if<ScrollingPlatformLayerContainer>(&m_data))
             return holder->get();
         return nullptr;
     }
@@ -105,7 +105,7 @@ public:
         return WTF::switchOn(m_data,
             [](std::monostate) { return false; },
             [](const GraphicsLayerData& data) { return !!data.graphicsLayer; },
-            [](const PlatformLayerContainer& holder) { return !!holder; },
+            [](const ScrollingPlatformLayerContainer& holder) { return !!holder; },
             [](const Markable<PlatformLayerIdentifier>& layerID) { return !!layerID; }
         );
     }
@@ -148,7 +148,7 @@ private:
 
     WEBCORE_EXPORT static ScrollingPlatformLayer* platformLayerFromGraphicsLayer(GraphicsLayer&);
 
-    Variant<std::monostate, GraphicsLayerData, PlatformLayerContainer, Markable<PlatformLayerIdentifier>> m_data;
+    Variant<std::monostate, GraphicsLayerData, ScrollingPlatformLayerContainer, Markable<PlatformLayerIdentifier>> m_data;
 };
 
 enum class ScrollingStateNodeProperty : uint64_t {

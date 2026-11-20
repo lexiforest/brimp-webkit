@@ -37,7 +37,7 @@ messages -> NetworkProcess : AuxiliaryProcess WantsAsyncDispatchMessage {
     AddAllowedWebPageProxyIdentifier(WebCore::ProcessIdentifier processIdentifier, WebKit::WebPageProxyIdentifier pageID)
     AuthorizeDownloadForWebProcess(WebCore::ProcessIdentifier processIdentifier, WebKit::DownloadID downloadID) -> ()
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     SetIgnoreTLSErrors(PAL::SessionID sessionID, bool ignoreTLSErrors)
     UserPreferredLanguagesChanged(Vector<String> languages)
     SetNetworkProxySettings(PAL::SessionID sessionID, struct WebCore::SoupNetworkProxySettings settings)
@@ -45,7 +45,7 @@ messages -> NetworkProcess : AuxiliaryProcess WantsAsyncDispatchMessage {
     SetPersistentCredentialStorageEnabled(PAL::SessionID sessionID, bool enabled)
 #endif
 
-#if USE(CURL)
+#if USE(CURL) && !PLATFORM(GTK)
     SetNetworkProxySettings(PAL::SessionID sessionID, WebCore::CurlProxySettings settings)
 #endif
 

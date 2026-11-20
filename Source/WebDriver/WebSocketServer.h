@@ -37,7 +37,7 @@
 #include <wtf/WeakPtr.h>
 #include <wtf/text/WTFString.h>
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 #include <wtf/glib/GRefPtr.h>
 typedef struct _SoupServer SoupServer;
 typedef struct _SoupWebsocketConnection SoupWebsocketConnection;
@@ -84,7 +84,7 @@ private:
 class WebSocketMessageHandler {
 public:
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     using Connection = GRefPtr<SoupWebsocketConnection>;
 #endif
 
@@ -148,7 +148,7 @@ private:
     RefPtr<WebSocketListener> m_listener;
     HashMap<WebSocketMessageHandler::Connection, String> m_connectionToSession;
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     GRefPtr<SoupServer> m_soupServer;
     std::vector<GRefPtr<SoupWebsocketConnection>> m_staticConnections;
 #endif

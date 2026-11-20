@@ -36,13 +36,13 @@
 #include <wtf/URL.h>
 #include <wtf/UUID.h>
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 #include "SoupCookiePersistentStorageType.h"
 #include <WebCore/HTTPCookieAcceptPolicy.h>
 #include <WebCore/SoupNetworkProxySettings.h>
 #endif
 
-#if USE(CURL)
+#if USE(CURL) && !PLATFORM(GTK)
 #include <WebCore/CurlProxySettings.h>
 #endif
 
@@ -69,7 +69,7 @@ struct NetworkSessionCreationParameters {
 #endif
     String hstsStorageDirectory;
     SandboxExtension::Handle hstsStorageDirectoryExtensionHandle;
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     String cookiePersistentStoragePath;
     SoupCookiePersistentStorageType cookiePersistentStorageType { SoupCookiePersistentStorageType::Text };
     bool persistentCredentialStorageEnabled { true };
@@ -77,7 +77,7 @@ struct NetworkSessionCreationParameters {
     WebCore::SoupNetworkProxySettings proxySettings;
     WebCore::HTTPCookieAcceptPolicy cookieAcceptPolicy { WebCore::HTTPCookieAcceptPolicy::ExclusivelyFromMainDocumentDomain };
 #endif
-#if USE(CURL)
+#if USE(CURL) && !PLATFORM(GTK)
     String cookiePersistentStorageFile;
     WebCore::CurlProxySettings proxySettings;
 #endif

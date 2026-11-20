@@ -27,6 +27,11 @@
 #include "WebCookieManager.h"
 
 #include "NetworkProcess.h"
+#if PLATFORM(GTK)
+#include "NetworkSessionCurl.h"
+#include "SoupCookiePersistentStorageType.h"
+#include <WebCore/CookieJarDB.h>
+#endif
 #include <WebCore/HTTPCookieAcceptPolicy.h>
 #include <WebCore/NetworkStorageSession.h>
 
@@ -57,5 +62,23 @@ void WebCookieManager::platformSetHTTPCookieAcceptPolicy(PAL::SessionID sessionI
 
     completionHandler();
 }
+
+#if PLATFORM(GTK)
+void WebCookieManager::setCookiePersistentStorage(PAL::SessionID id, const String& path, SoupCookiePersistentStorageType type)
+{
+    if (auto* session = protect(m_process)->networkSession(id))
+        static_cast<NetworkSessionCurl&>(*session).setCookiePersistentStorage(path, type);
+}
+
+void WebCookieManager::replaceCookies(PAL::SessionID id, const Vector<Cookie>& cookies, CompletionHandler<void()>&& completionHandler)
+{
+    if (auto* storage = protect(m_process)->storageSession(id)) {
+        storage->cookieDatabase().deleteAllCookies();
+        for (const auto& cookie : cookies)
+            storage->cookieDatabase().setCookie(cookie);
+    }
+    completionHandler();
+}
+#endif
 
 } // namespace WebKit

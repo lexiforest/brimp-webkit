@@ -34,7 +34,7 @@
 
 namespace WebCore {
 
-WTF_MAKE_TZONE_ALLOCATED_IMPL(x);
+WTF_MAKE_TZONE_ALLOCATED_IMPL(CurlSSLVerifier);
 
 CurlSSLVerifier::CurlSSLVerifier(void* sslCtx)
 {

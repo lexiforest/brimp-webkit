@@ -514,5 +514,9 @@ GTlsPasswordFlags webkit_authentication_request_get_certificate_pin_flags(WebKit
 {
     g_return_val_if_fail(WEBKIT_IS_AUTHENTICATION_REQUEST(request), G_TLS_PASSWORD_NONE);
 
+#if USE(SOUP)
     return static_cast<GTlsPasswordFlags>(request->priv->authenticationChallenge->core().tlsPasswordFlags());
+#else
+    return G_TLS_PASSWORD_NONE;
+#endif
 }

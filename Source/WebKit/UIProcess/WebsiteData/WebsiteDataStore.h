@@ -65,11 +65,11 @@
 #include <wtf/spi/darwin/XPCSPI.h>
 #endif
 
-#if USE(CURL)
+#if USE(CURL) && !PLATFORM(GTK)
 #include <WebCore/CurlProxySettings.h>
 #endif
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 #include "SoupCookiePersistentStorageType.h"
 #include <WebCore/HTTPCookieAcceptPolicy.h>
 #include <WebCore/SoupNetworkProxySettings.h>
@@ -326,12 +326,12 @@ public:
     static std::optional<bool> useNetworkLoader();
 #endif
 
-#if USE(CURL)
+#if USE(CURL) && !PLATFORM(GTK)
     void setNetworkProxySettings(WebCore::CurlProxySettings&&);
     const WebCore::CurlProxySettings& networkProxySettings() const LIFETIME_BOUND { return m_proxySettings; }
 #endif
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     void setPersistentCredentialStorageEnabled(bool);
     bool persistentCredentialStorageEnabled() const { return m_persistentCredentialStorageEnabled && isPersistent(); }
     void setIgnoreTLSErrors(bool);
@@ -640,11 +640,11 @@ private:
     Vector<uint8_t> m_uiProcessCookieStorageIdentifier;
 #endif
 
-#if USE(CURL)
+#if USE(CURL) && !PLATFORM(GTK)
     WebCore::CurlProxySettings m_proxySettings;
 #endif
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     bool m_persistentCredentialStorageEnabled { true };
     bool m_ignoreTLSErrors { true };
     WebCore::SoupNetworkProxySettings m_networkProxySettings;

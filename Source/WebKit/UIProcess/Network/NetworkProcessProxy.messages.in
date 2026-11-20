@@ -79,7 +79,7 @@ messages -> NetworkProcessProxy WantsDispatchMessage {
 
     ConsiderProcessSwapForNavigationResponse(WebKit::WebPageProxyIdentifier pageIdentifier, WebCore::NavigationIdentifier navigationID, enum:uint8_t WebCore::BrowsingContextGroupSwitchDecision browsingContextGroupSwitchDecision, enum:uint8_t WebCore::NavigationResponseProcessSwapReason reason, WebCore::Site responseSite, WebKit::NetworkResourceLoadIdentifier existingNetworkResourceLoadIdentifierToResume) -> (std::optional<WebCore::ProcessIdentifier> destinationWebProcess)
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     DidExceedMemoryLimit()
 #endif
 

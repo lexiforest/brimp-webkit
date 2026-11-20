@@ -20,7 +20,7 @@
 #pragma once
 
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 
 #include <libsoup/soup.h>
 #include <wtf/Platform.h>

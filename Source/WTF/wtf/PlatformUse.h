@@ -75,7 +75,7 @@
 #define USE_FONT_VARIANT_VIA_FEATURES 1
 #endif
 
-#if PLATFORM(GTK) || PLATFORM(WPE)
+#if PLATFORM(WPE)
 #define USE_SOUP 1
 #endif
 

@@ -29,6 +29,10 @@
 #include <WebCore/HTTPStatusCodes.h>
 #include <WebCore/ResourceResponseBase.h>
 
+#if PLATFORM(GTK)
+#include <libsoup/soup.h>
+#endif
+
 namespace WebCore {
 
 class CurlResponse;
@@ -57,6 +61,11 @@ public:
     bool isSeeOther() const { return httpStatusCode() == httpStatus303SeeOther; }
     bool isUnauthorized() const { return httpStatusCode() == httpStatus401Unauthorized; }
     bool isProxyAuthenticationRequired() const { return httpStatusCode() == httpStatus407ProxyAuthenticationRequired; }
+
+#if PLATFORM(GTK)
+    WEBCORE_EXPORT void updateFromSoupMessageHeaders(SoupMessageHeaders*);
+    WEBCORE_EXPORT void updateSoupMessageHeaders(SoupMessageHeaders*) const;
+#endif
 
 private:
     friend class ResourceResponseBase;

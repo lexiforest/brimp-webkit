@@ -120,17 +120,17 @@ public:
 
     std::optional<Vector<uint8_t>> getDataAsVector() const
     {
-        uint8_t* data { nullptr };
+        char* data { nullptr };
         auto length = ::BIO_get_mem_data(m_bio, &data);
         if (length < 0)
             return std::nullopt;
 
-        return Vector(std::span<const uint8_t> { data, static_cast<size_t>(length) });
+        return Vector(std::span<const uint8_t> { byteCast<uint8_t>(data), static_cast<size_t>(length) });
     }
 
     String getDataAsString() const
     {
-        uint8_t* data { nullptr };
+        char* data { nullptr };
         auto length = ::BIO_get_mem_data(m_bio, &data);
         if (length < 0)
             return String();
@@ -217,7 +217,7 @@ static String getOrganizationName(const X509* x509)
 
 static String getSubjectName(const X509* x509)
 {
-    static const unsigned long flags = (ASN1_STRFLGS_RFC2253 | ASN1_STRFLGS_ESC_QUOTE | XN_FLAG_SEP_CPLUS_SPC | XN_FLAG_DN_REV | XN_FLAG_FN_NONE | XN_FLAG_SPC_EQ) & ~ASN1_STRFLGS_ESC_MSB;
+    static const unsigned long flags = (ASN1_STRFLGS_RFC2253 | ASN1_STRFLGS_ESC_QUOTE | XN_FLAG_SEP_CPLUS_SPC | XN_FLAG_DN_REV | XN_FLAG_FN_SN | XN_FLAG_SPC_EQ) & ~ASN1_STRFLGS_ESC_MSB;
 
     auto subjectName = X509_get_subject_name(x509);
     if (!subjectName)

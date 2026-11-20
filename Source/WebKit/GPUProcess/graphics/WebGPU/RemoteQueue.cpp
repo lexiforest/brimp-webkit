@@ -36,8 +36,10 @@
 #include <WebCore/SharedMemory.h>
 #include <WebCore/WebGPUBuffer.h>
 #include <WebCore/WebGPUQueue.h>
+#if HAVE(WEBGPU_IMPLEMENTATION)
 #include <WebGPU/WebGPU.h>
 #include <WebGPU/WebGPUExt.h>
+#endif
 #include <wtf/TZoneMallocInlines.h>
 
 #define MESSAGE_CHECK(assertion) MESSAGE_CHECK_BASE(assertion, m_streamConnection)
@@ -46,6 +48,7 @@ namespace WebKit {
 
 WTF_MAKE_TZONE_ALLOCATED_IMPL(RemoteQueue);
 
+#if HAVE(WEBGPU_IMPLEMENTATION)
 // For transfers at or above WGPU_LARGE_BUFFER_SIZE the backend uses newBufferWithBytesNoCopy and aliases `data`'s mapping; keep it alive until the GPU has consumed the bytes. Smaller transfers are copied into a Metal buffer synchronously, so `data` can be released as soon as we return.
 static void keepAliveUntilSubmittedWorkDone(WebCore::WebGPU::Queue& backing, RefPtr<WebCore::SharedMemory>&& data)
 {
@@ -55,6 +58,8 @@ static void keepAliveUntilSubmittedWorkDone(WebCore::WebGPU::Queue& backing, Ref
         data = nullptr;
     });
 }
+
+#endif
 
 RemoteQueue::RemoteQueue(WebCore::WebGPU::Queue& queue, WebGPU::ObjectHeap& objectHeap, Ref<IPC::StreamServerConnection>&& streamConnection, RemoteGPU& gpu, WebGPUIdentifier identifier)
     : m_backing(queue)
@@ -115,7 +120,9 @@ void RemoteQueue::writeBuffer(
 
     Ref backing = m_backing;
     backing->writeBufferNoCopy(*convertedBuffer, bufferOffset, data->mutableSpan(), 0, std::nullopt);
+#if HAVE(WEBGPU_IMPLEMENTATION)
     keepAliveUntilSubmittedWorkDone(backing, WTF::move(data));
+#endif
     completionHandler(true);
 }
 
@@ -158,7 +165,9 @@ void RemoteQueue::writeTexture(
 
     Ref backing = m_backing;
     backing->writeTexture(*convertedDestination, data->mutableSpan(), *convertedDataLayout, *convertedSize);
+#if HAVE(WEBGPU_IMPLEMENTATION)
     keepAliveUntilSubmittedWorkDone(backing, WTF::move(data));
+#endif
     completionHandler(true);
 }
 

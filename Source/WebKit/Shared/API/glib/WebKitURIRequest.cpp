@@ -22,6 +22,7 @@
 
 #include "WebKitURIRequestPrivate.h"
 #include <WebCore/GUniquePtrSoup.h>
+#include <WebCore/FormData.h>
 #include <glib/gi18n-lib.h>
 #include <wtf/glib/WTFGType.h>
 #include <wtf/text/CString.h>
@@ -216,4 +217,24 @@ void webkitURIRequestGetResourceRequest(WebKitURIRequest* request, ResourceReque
     resourceRequest = request->priv->resourceRequest;
     if (request->priv->httpHeaders)
         resourceRequest.updateFromSoupMessageHeaders(request->priv->httpHeaders.get());
+}
+
+void webkit_uri_request_set_http_method(WebKitURIRequest* request, const char* method)
+{
+    g_return_if_fail(WEBKIT_IS_URI_REQUEST(request));
+    g_return_if_fail(method && *method);
+    request->priv->resourceRequest.setHTTPMethod(String::fromUTF8(method));
+    request->priv->httpMethod = nullptr;
+}
+
+void webkit_uri_request_set_http_body(WebKitURIRequest* request, GBytes* body)
+{
+    g_return_if_fail(WEBKIT_IS_URI_REQUEST(request));
+    if (!body) {
+        request->priv->resourceRequest.setHTTPBody(nullptr);
+        return;
+    }
+    gsize size;
+    auto* data = static_cast<const uint8_t*>(g_bytes_get_data(body, &size));
+    request->priv->resourceRequest.setHTTPBody(FormData::create(std::span { data, size }));
 }

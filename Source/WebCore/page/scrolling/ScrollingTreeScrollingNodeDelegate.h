@@ -27,6 +27,9 @@
 
 #if ENABLE(ASYNC_SCROLLING)
 
+#if USE(COORDINATED_GRAPHICS)
+#include <WebCore/CoordinatedPlatformLayer.h>
+#endif
 #include <WebCore/RubberbandingState.h>
 #include <WebCore/ScrollingTreeScrollingNode.h>
 #include <wtf/EnumSet.h>
@@ -65,7 +68,7 @@ public:
     virtual FloatPoint adjustedScrollPosition(const FloatPoint& scrollPosition) const { return scrollPosition; }
     virtual String scrollbarStateForOrientation(ScrollbarOrientation) const { return ""_s; }
 
-    virtual Vector<PlatformLayerContainer, 2> hitTestableScrollbarLayers() const { return { }; }
+    virtual Vector<ScrollingPlatformLayerContainer, 2> hitTestableScrollbarLayers() const { return { }; }
 
     virtual float rubberbandHyperbolicCoefficientForTesting() const { return 0; }
 

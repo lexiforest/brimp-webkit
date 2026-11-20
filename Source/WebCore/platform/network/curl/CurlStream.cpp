@@ -37,7 +37,11 @@ namespace WebCore {
 
 WTF_MAKE_TZONE_ALLOCATED_IMPL(CurlStream);
 
-CurlStream::CurlStream(CurlStreamScheduler& scheduler, CurlStreamID streamID, URL&& url, ServerTrustEvaluation serverTrustEvaluation, LocalhostAlias localhostAlias)
+CurlStream::CurlStream(CurlStreamScheduler& scheduler, CurlStreamID streamID, URL&& url, ServerTrustEvaluation serverTrustEvaluation, LocalhostAlias localhostAlias
+#if PLATFORM(GTK)
+    , GRefPtr<GProxyResolver> proxyResolver
+#endif
+)
     : m_scheduler(scheduler)
     , m_streamID(streamID)
 {
@@ -47,6 +51,12 @@ CurlStream::CurlStream(CurlStreamScheduler& scheduler, CurlStreamID streamID, UR
 
     url.setProtocol(url.protocolIs("wss"_s) ? "https"_s : "http"_s);
     m_curlHandle->setURL(WTF::move(url), localhostAlias);
+#if PLATFORM(GTK)
+    if (!m_curlHandle->applyProxyResolver(proxyResolver.get())) {
+        notifyFailure(CURLE_COULDNT_RESOLVE_PROXY);
+        return;
+    }
+#endif
 
     if (serverTrustEvaluation == ServerTrustEvaluation::Disable)
         m_curlHandle->disableServerTrustEvaluation();

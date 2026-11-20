@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Package the macOS WebKit frameworks, subprocesses, resources and headers."""
+"""Package a macOS WebKit or Linux WebKitGTK SDK."""
 
 import argparse
 import hashlib
 import json
+import os
 import plistlib
 import shutil
 import subprocess
@@ -145,13 +146,128 @@ in BUILD-INFO.txt. License texts are under share/licenses/.
     verify_package(output)
 
 
+LINUX_REQUIRED_FILES = (
+    "lib/libwebkitgtk-6.0.so",
+    "lib/libjavascriptcoregtk-6.0.so",
+    "lib/webkitgtk-6.0/injected-bundle/libwebkitgtkinjectedbundle.so",
+    "libexec/webkitgtk-6.0/WebKitWebProcess",
+    "libexec/webkitgtk-6.0/WebKitNetworkProcess",
+    "libexec/webkitgtk-6.0/WebKitGPUProcess",
+    "bin/WebKitWebDriver",
+    "include/webkitgtk-6.0/webkit/webkit.h",
+    "lib/pkgconfig/webkitgtk-6.0.pc",
+    "lib/pkgconfig/javascriptcoregtk-6.0.pc",
+)
+CURL_LICENSES = {
+    "boringssl": "LICENSE",
+    "brotli": "LICENSE",
+    "cares": "LICENSE.md",
+    "curl": "COPYING",
+    "nghttp2": "COPYING",
+    "nghttp3": "COPYING",
+    "ngtcp2": "COPYING",
+    "zlib": "LICENSE",
+    "zstd": "LICENSE",
+}
+
+
+def package_linux(root, installed, output, curl_build, curl_source, tag, commit):
+    for name in LINUX_REQUIRED_FILES:
+        if not (installed / name).is_file():
+            raise RuntimeError(f"Missing Linux SDK file: {name}")
+    validate_links(installed)
+    shutil.copytree(installed, output, symlinks=True)
+    copy_licenses(root, output)
+    for dependency, filename in CURL_LICENSES.items():
+        source = curl_build / "deps/src" / dependency / filename
+        target = output / "share/licenses/curl-dependencies" / dependency / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    shutil.copy2(
+        curl_source / "LICENSE", output / "share/licenses/curl-impersonate-LICENSE"
+    )
+    curl_commit = subprocess.check_output(
+        ["git", "-C", str(curl_source), "rev-parse", "HEAD"], text=True
+    ).strip()
+    metadata = {
+        "tag": tag,
+        "commit": commit,
+        "target": "linux-x64-ubuntu-26.04",
+        "install_prefix": str(installed),
+        "curl_impersonate_commit": curl_commit,
+        "curl_profile": "safari270",
+    }
+    (output / "BUILD-INFO.txt").write_text(
+        "".join(f"{key}={value}\n" for key, value in metadata.items())
+    )
+    (output / "README.md").write_text(f"""# WebKitGTK Linux x64 SDK
+
+Built for Ubuntu 26.04 x86_64 with curl-impersonate and private static BoringSSL.
+Install the CONTENTS of this directory at `{installed}`. This SDK has a fixed
+installation prefix: subprocess paths and pkg-config files embed that path.
+Keep `lib/`, `libexec/`, `include/` and `share/` together at that prefix.
+
+System dependencies are not bundled. On Ubuntu 26.04, install
+`libwebkitgtk-6.0-4`, `libwebkitgtk-6.0-dev`, `bubblewrap` and `xdg-dbus-proxy`
+to obtain the runtime and development dependencies. Select this SDK explicitly:
+
+```sh
+export PKG_CONFIG_PATH={installed}/lib/pkgconfig
+export LD_LIBRARY_PATH={installed}/lib
+pkg-config --cflags --libs webkitgtk-6.0
+```
+
+Scope these environment settings to your embedding application. The system
+WebKit package supplies dependencies; the loader must use this SDK's libraries.
+The browser sandbox remains enabled. Media, speech and gamepad support are
+excluded. Client certificates, persistent credentials and parts of cookie
+privacy/observation are not implemented. This is not a Brimp pip/npm bundle.
+
+The corresponding WebKit and curl-impersonate source revisions are recorded in
+BUILD-INFO.txt. License texts, including statically linked dependencies, are
+under share/licenses/. The network regression suite is in the tagged WebKit
+source under Tools/Scripts/linux-webkit/.
+""")
+    manifest = {"format": 1, **metadata, "files": file_records(output)}
+    (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    verify_package(output)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-dir", required=True, type=Path)
+    parser.add_argument("--platform", choices=("macos", "linux"), default="macos")
+    parser.add_argument("--curl-build-dir", type=Path)
+    parser.add_argument("--curl-source-dir", type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--tag", required=True)
     parser.add_argument("--commit", required=True)
     args = parser.parse_args()
+    if args.platform == "linux":
+        if not args.curl_build_dir or not args.curl_source_dir:
+            parser.error(
+                "Linux packaging requires --curl-build-dir and --curl-source-dir"
+            )
+        if sys.platform != "linux":
+            parser.error("Linux SDK packaging requires Linux")
+        header = subprocess.check_output(
+            ["readelf", "-h", str(args.build_dir / "lib/libwebkitgtk-6.0.so")],
+            text=True,
+            env={**os.environ, "LC_ALL": "C"},
+        )
+        if "Advanced Micro Devices X86-64" not in header:
+            parser.error("Expected x86_64 WebKitGTK")
+        package_linux(
+            Path(__file__).resolve().parents[2],
+            args.build_dir.resolve(),
+            args.output_dir.resolve(),
+            args.curl_build_dir.resolve(),
+            args.curl_source_dir.resolve(),
+            args.tag,
+            args.commit,
+        )
+        print(args.output_dir)
+        return
     if sys.platform != "darwin":
         parser.error("Full WebKit SDK packaging currently supports macOS arm64")
     build = args.build_dir.resolve()

@@ -27,6 +27,7 @@
 #pragma once
 
 #include <WebCore/ResourceErrorBase.h>
+#include <WebCore/CertificateInfo.h>
 
 namespace WebCore {
 
@@ -49,6 +50,7 @@ public:
         URL failingURL;
         String localizedDescription;
         IsSanitized isSanitized;
+        CertificateInfo certificateInfo;
     };
     WEBCORE_EXPORT static ResourceError fromIPCData(std::optional<IPCData>&&);
     WEBCORE_EXPORT std::optional<IPCData> ipcData() const;
@@ -59,12 +61,19 @@ public:
 
     ErrorRecoveryMethod errorRecoveryMethod() const { return ErrorRecoveryMethod::NoRecovery; }
 
+    void setCertificateInfo(CertificateInfo&& info) { m_certificateInfo = WTF::move(info); }
+#if PLATFORM(GTK)
+    GTlsCertificateFlags tlsErrors() const { return m_certificateInfo.tlsErrors(); }
+    GTlsCertificate* certificate() const { return m_certificateInfo.certificate().get(); }
+#endif
+
     static bool platformCompare(const ResourceError& a, const ResourceError& b);
 
 private:
     friend class ResourceErrorBase;
 
     void doPlatformIsolatedCopy(const ResourceError&);
+    CertificateInfo m_certificateInfo;
 };
 
 } // namespace WebCore

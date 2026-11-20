@@ -306,7 +306,7 @@ public:
     void startMemorySampler(const double interval);
     void stopMemorySampler();
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     static void setNetworkProcessMemoryPressureHandlerConfiguration(const std::optional<MemoryPressureHandler::Configuration>& configuration) { s_networkProcessMemoryPressureHandlerConfiguration = configuration; }
 #endif
     void setEnhancedAccessibility(bool);
@@ -842,7 +842,7 @@ private:
     using WebContextSupplementMap = HashMap<ASCIILiteral, Ref<WebContextSupplement>>;
     WebContextSupplementMap m_supplements;
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     static std::optional<MemoryPressureHandler::Configuration> s_networkProcessMemoryPressureHandlerConfiguration;
 #endif
 

@@ -41,7 +41,7 @@ WebCookieCache::~WebCookieCache() = default;
 
 bool WebCookieCache::isSupported()
 {
-#if HAVE(COOKIE_CHANGE_LISTENER_API)
+#if HAVE(COOKIE_CHANGE_LISTENER_API) && !USE(CURL)
     return true;
 #else
     return false;

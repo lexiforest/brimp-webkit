@@ -35,7 +35,7 @@
 #include <wtf/WallTime.h>
 #include <wtf/WeakRef.h>
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 #include "SoupCookiePersistentStorageType.h"
 #endif
 
@@ -64,7 +64,7 @@ public:
 
     void setHTTPCookieAcceptPolicy(PAL::SessionID, WebCore::HTTPCookieAcceptPolicy, CompletionHandler<void()>&&);
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     void setCookiePersistentStorage(PAL::SessionID, const String& storagePath, SoupCookiePersistentStorageType);
 #endif
 
@@ -89,7 +89,7 @@ private:
     void platformSetHTTPCookieAcceptPolicy(PAL::SessionID, WebCore::HTTPCookieAcceptPolicy, CompletionHandler<void()>&&);
     void getHTTPCookieAcceptPolicy(PAL::SessionID, CompletionHandler<void(WebCore::HTTPCookieAcceptPolicy)>&&);
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     void replaceCookies(PAL::SessionID, const Vector<WebCore::Cookie>&, CompletionHandler<void()>&&);
 #endif
 

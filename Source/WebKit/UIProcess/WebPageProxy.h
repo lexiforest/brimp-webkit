@@ -965,6 +965,7 @@ public:
     void makeViewBlankIfUnpaintedSinceLastLoadCommit();
         
     void close();
+    void close(CompletionHandler<void()>&&);
     bool tryClose();
     bool isClosed() const { return m_isClosed; }
 

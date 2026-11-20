@@ -71,7 +71,7 @@ const WTF::String& Error::webKitPluginErrorDomain()
 #endif
 }
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 const WTF::String& Error::webKitDownloadErrorDomain()
 {
     static NeverDestroyed<WTF::String> webKitErrorDomainString(MAKE_STATIC_STRING_IMPL("WebKitDownloadError"));

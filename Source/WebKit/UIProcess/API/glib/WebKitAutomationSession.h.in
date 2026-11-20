@@ -73,6 +73,21 @@ webkit_automation_session_set_application_info (WebKitAutomationSession *session
 WEBKIT_API WebKitApplicationInfo *
 webkit_automation_session_get_application_info (WebKitAutomationSession *session);
 
+/* Brimp local embedding SPI. Messages stay in-process; no inspector socket is opened. */
+typedef struct _WebKitWebContext WebKitWebContext;
+typedef struct _WebKitWebView WebKitWebView;
+
+WEBKIT_API WebKitAutomationSession *
+webkit_web_context_create_local_automation_session (WebKitWebContext *context, const char *id);
+WEBKIT_API void
+webkit_automation_session_connect_local (WebKitAutomationSession *session);
+WEBKIT_API void
+webkit_automation_session_disconnect_local (WebKitAutomationSession *session);
+WEBKIT_API void
+webkit_automation_session_dispatch_message (WebKitAutomationSession *session, const char *message);
+WEBKIT_API char *
+webkit_automation_session_register_web_view (WebKitAutomationSession *session, WebKitWebView *web_view);
+
 G_END_DECLS
 
 #endif /* WebKitAutomationSession_h */

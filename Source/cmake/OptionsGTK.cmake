@@ -14,7 +14,15 @@ list(APPEND WEBKIT_UNSAFE_BUFFER_WARNING_FLAGS -Wno-unsafe-buffer-usage-in-forma
 find_package(GLib 2.70.0 REQUIRED COMPONENTS GioUnix Thread Module)
 find_package(Cairo 1.16.0 REQUIRED)
 find_package(LibGcrypt 1.7.0 REQUIRED)
+# Soup types remain part of the GTK embedding API; browser transport uses curl.
 find_package(Soup3 3.0.0 REQUIRED)
+include(CurlImpersonate)
+find_package(LibPSL 0.20.2 REQUIRED)
+SET_AND_EXPOSE_TO_BUILD(USE_CURL ON)
+SET_AND_EXPOSE_TO_BUILD(USE_CURL_IMPERSONATE ON)
+# WebCrypto keeps GTK's GCrypt implementation; BoringSSL belongs to curl TLS.
+SET_AND_EXPOSE_TO_BUILD(USE_OPENSSL OFF)
+SET_AND_EXPOSE_TO_BUILD(USE_BORINGSSL ON)
 find_package(Tasn1 REQUIRED)
 find_package(HarfBuzz 2.7.4 REQUIRED COMPONENTS ICU)
 find_package(ICU 70.1 REQUIRED COMPONENTS data i18n uc)

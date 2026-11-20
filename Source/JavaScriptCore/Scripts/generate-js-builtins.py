@@ -68,11 +68,9 @@ def preprocess_builtins_file(filepath, file_text, macro_flag):
     if not CONDITIONAL_DIRECTIVE_PATTERN.search(file_text):
         return file_text
 
-    if sys.platform != 'darwin':
-        raise ParseException("No support for preprocessing of conditional directives in %s." % filepath)
-
     # -t keeps unifdef from lexing the JavaScript input as C.
-    command = ['/usr/bin/xcrun', 'unifdef', '-t', macro_flag, filepath]
+    command = (['/usr/bin/xcrun', 'unifdef'] if sys.platform == 'darwin' else ['unifdef'])
+    command += ['-t', macro_flag, filepath]
     result = subprocess.run(command, stdout=subprocess.PIPE, encoding="UTF-8")
     if result.returncode >= 2:
         raise ParseException("Failed to resolve conditional directives in %s." % filepath)

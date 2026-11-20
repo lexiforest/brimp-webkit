@@ -46,7 +46,7 @@ messages -> WebCookieManager {
     void StartObservingCookieChanges(PAL::SessionID sessionID)
     void StopObservingCookieChanges(PAL::SessionID sessionID)
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     void ReplaceCookies(PAL::SessionID sessionID, Vector<WebCore::Cookie> cookies) -> ()
     void SetCookiePersistentStorage(PAL::SessionID sessionID, String storagePath, enum:bool WebKit::SoupCookiePersistentStorageType storageType)
 #endif

@@ -385,9 +385,98 @@ jobs:
           path: ${{ runner.temp }}/webkit-build.log
           if-no-files-found: ignore
 
+  webkit-linux:
+    name: WebKit Linux x64 (Ubuntu 26.04)
+    needs: validate
+    runs-on: ubuntu-26.04
+    timeout-minutes: 360
+    env:
+      RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+      BRIMP_BUILD_JOBS: "4"
+      CCACHE_DISABLE: "1"
+    steps:
+      - name: Check out release sources
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+          sparse-checkout: |
+            .github
+            Source
+            Tools
+            WebKitLibraries
+      - name: Install Linux build and test dependencies
+        shell: bash
+        run: |
+          # Free unused preinstalled SDKs on this disposable hosted runner.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get update
+          sudo apt-get build-dep -y --no-install-recommends webkit2gtk
+          sudo apt-get install -y --no-install-recommends \
+            clang-21 lld-21 ccache cmake ninja-build unifdef nasm \
+            xvfb xauth dbus-x11 python3-pytest python3-websockets python3-h2 \
+            curl pkg-config git ca-certificates bubblewrap xdg-dbus-proxy
+          sudo apt-get clean
+          sudo mkdir -p /opt/brimp
+          sudo chown "$(id -u):$(id -g)" /opt/brimp
+          df -h /opt/brimp
+          # Fail before compiling if the runner image leaves insufficient space.
+          test "$(df --output=avail -B1 /opt/brimp | tail -1)" -ge 12884901888
+      - name: Build curl-impersonate and WebKitGTK
+        shell: bash
+        run: |
+          set -o pipefail
+          bash Tools/Scripts/linux-webkit/build.sh "$GITHUB_WORKSPACE" /opt/brimp \
+            2>&1 | tee "$RUNNER_TEMP/webkit-linux-build.log"
+      - name: Package Linux SDK
+        shell: bash
+        run: |
+          package="WebKit-$RELEASE_TAG-linux-x64-ubuntu-26.04"
+          python3 Tools/Scripts/package-webkit-sdk.py \
+            --platform linux --build-dir /opt/brimp/sdk/webkit-curl \
+            --output-dir "$RUNNER_TEMP/$package" \
+            --curl-build-dir /opt/brimp/build/curl \
+            --curl-source-dir /opt/brimp/src/curl-impersonate \
+            --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT"
+          tar -C "$RUNNER_TEMP" -czf "$package.tar.gz" "$package"
+      - name: Test extracted SDK without original build products
+        shell: bash
+        run: |
+          set -o pipefail
+          package="WebKit-$RELEASE_TAG-linux-x64-ubuntu-26.04"
+          sdk=/opt/brimp/sdk/webkit-curl
+          products=/opt/brimp/build/webkit-curl
+          mv "$sdk" "$sdk.hidden"
+          mv "$products" "$products.hidden"
+          trap 'rm -rf "$sdk"; mv "$sdk.hidden" "$sdk"; mv "$products.hidden" "$products"' EXIT
+          mkdir "$sdk"
+          tar -xzf "$package.tar.gz" -C "$sdk" --strip-components=1
+          # GTK embeds this install prefix; test the archive at that same prefix.
+          # The runner is unprivileged and the browser sandbox stays enabled.
+          bash Tools/Scripts/linux-webkit/test.sh "$sdk" \
+            /opt/brimp/sdk/curl-impersonate-2.3.2 \
+            2>&1 | tee "$RUNNER_TEMP/webkit-linux-tests.log"
+      - name: Upload Linux WebKit archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: WebKit-linux-x64
+          path: WebKit-${{ env.RELEASE_TAG }}-linux-x64-ubuntu-26.04.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+      - name: Upload Linux build and test logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: WebKit-linux-x64-logs
+          path: |
+            ${{ runner.temp }}/webkit-linux-build.log
+            ${{ runner.temp }}/webkit-linux-tests.log
+          if-no-files-found: ignore
+
   release:
     name: Publish GitHub release
-    needs: [validate, build, webkit]
+    needs: [validate, build, webkit, webkit-linux]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -402,7 +491,7 @@ jobs:
       - name: Create checksums
         working-directory: dist
         run: |
-          test "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 6
+          test "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 7
           sha256sum ./*.tar.gz > SHA256SUMS
 
       - name: Create release and upload assets

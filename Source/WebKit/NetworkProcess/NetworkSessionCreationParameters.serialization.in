@@ -41,7 +41,7 @@ enum class WebKit::AllowsCellularAccess : bool;
 #endif
     String hstsStorageDirectory;
     WebKit::SandboxExtensionHandle hstsStorageDirectoryExtensionHandle;
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     String cookiePersistentStoragePath;
     WebKit::SoupCookiePersistentStorageType cookiePersistentStorageType;
     bool persistentCredentialStorageEnabled;
@@ -49,7 +49,7 @@ enum class WebKit::AllowsCellularAccess : bool;
     WebCore::SoupNetworkProxySettings proxySettings;
     WebCore::HTTPCookieAcceptPolicy cookieAcceptPolicy;
 #endif
-#if USE(CURL)
+#if USE(CURL) && !PLATFORM(GTK)
     String cookiePersistentStorageFile;
     WebCore::CurlProxySettings proxySettings;
 #endif
@@ -124,6 +124,6 @@ enum class WebKit::AllowsCellularAccess : bool;
 #endif
 };
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 enum class WebKit::SoupCookiePersistentStorageType : bool
 #endif

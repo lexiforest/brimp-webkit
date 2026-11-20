@@ -106,7 +106,7 @@ private:
     mutable GRefPtr<GBytes> m_buffer;
     Box<FileSystem::FileHandle> m_fileHandle;
 #endif
-#if USE(CURL)
+#if USE(CURL) && !USE(GLIB)
     Box<Variant<Vector<uint8_t>, FileSystem::MappedFileData>> m_buffer;
 #endif
     bool m_isMap { false };

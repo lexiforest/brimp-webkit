@@ -25,6 +25,9 @@
 
 #include "config.h"
 #include "NetworkDataTaskCurl.h"
+#if PLATFORM(GTK)
+#include "NetworkSessionCurl.h"
+#endif
 
 #include "APIError.h"
 #include "AuthenticationChallengeDisposition.h"
@@ -140,6 +143,13 @@ Ref<CurlRequest> NetworkDataTaskCurl::createCurlRequest(ResourceRequest&& reques
     // Then, NetworkDataTaskCurl::resume() will be called and communication resumes.
     const auto captureMetrics = shouldCaptureExtraNetworkLoadMetrics() ? CurlRequest::CaptureNetworkLoadMetrics::Extended : CurlRequest::CaptureNetworkLoadMetrics::Basic;
     auto curlRequest = CurlRequest::create(request, *this, captureMetrics);
+#if PLATFORM(GTK)
+    auto& session = static_cast<NetworkSessionCurl&>(*m_session);
+    curlRequest->setProxyResolver(session.proxyResolver());
+    curlRequest->setProxyCredentials(m_proxyCredentialURL, m_proxyCredential.user(), m_proxyCredential.password());
+    if (session.ignoreTLSErrors())
+        curlRequest->disableServerTrustEvaluation();
+#endif
 
     if (m_session->networkProcess().localhostAliasesForTesting().contains<StringViewHashTranslator>(curlRequest->resourceRequest().url().host()))
         curlRequest->enableLocalhostAlias();
@@ -163,6 +173,9 @@ void NetworkDataTaskCurl::curlDidReceiveResponse(CurlRequest& request, CurlRespo
         return;
 
     m_response = ResourceResponse(receivedResponse);
+#if PLATFORM(GTK)
+    m_proxyURL = receivedResponse.proxyUrl;
+#endif
 
     updateNetworkLoadMetrics(receivedResponse.networkLoadMetrics);
     m_response.setDeprecatedNetworkLoadMetrics(Box<NetworkLoadMetrics>::create(WTF::move(receivedResponse.networkLoadMetrics)));
@@ -181,7 +194,7 @@ void NetworkDataTaskCurl::curlDidReceiveResponse(CurlRequest& request, CurlRespo
     }
 
     if (m_response.isProxyAuthenticationRequired() && receivedResponse.availableProxyAuth) {
-        tryProxyAuthentication(AuthenticationChallenge(receivedResponse, 0, m_response));
+        tryProxyAuthentication(AuthenticationChallenge(receivedResponse, m_proxyAuthFailureCount++, m_response));
         return;
     }
 
@@ -237,9 +250,19 @@ void NetworkDataTaskCurl::curlDidFailWithError(CurlRequest& request, ResourceErr
     if (state() == State::Canceling || state() == State::Completed || (!m_client && !isDownload()))
         return;
 
+    resourceError.setCertificateInfo(certificateInfo.isolatedCopy());
     if (resourceError.isCertificationVerificationError()) {
+#if PLATFORM(GTK)
+        auto& session = static_cast<NetworkSessionCurl&>(*m_session);
+        if (session.isCertificateAllowed(certificateInfo, request.resourceRequest().url().host().toString())) {
+            restartWithCredential(AuthenticationChallenge(request.resourceRequest().url(), certificateInfo, resourceError).protectionSpace(), { });
+            return;
+        }
+#else
         tryServerTrustEvaluation(AuthenticationChallenge(request.resourceRequest().url(), certificateInfo, resourceError));
         return;
+#endif
+        // GTK reports certificate rejection through load-failed-with-tls-errors.
     }
 
     if (isDownload()) {
@@ -490,8 +513,13 @@ void NetworkDataTaskCurl::tryProxyAuthentication(WebCore::AuthenticationChalleng
         }
 
         if (disposition == AuthenticationChallengeDisposition::UseCredential && !credential.isEmpty()) {
+#if PLATFORM(GTK)
+            m_proxyCredentialURL = m_proxyURL;
+            m_proxyCredential = credential;
+#else
             CurlContext::singleton().setProxyUserPass(credential.user(), credential.password());
             CurlContext::singleton().setDefaultProxyAuthMethod();
+#endif
 
             auto requestCredential = m_curlRequest ? Credential(m_curlRequest->user(), m_curlRequest->password(), CredentialPersistence::None) : Credential();
             restartWithCredential(challenge.protectionSpace(), requestCredential);

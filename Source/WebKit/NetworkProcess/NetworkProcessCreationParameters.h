@@ -37,7 +37,7 @@
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 #include <WebCore/HTTPCookieAcceptPolicy.h>
 #include <wtf/MemoryPressureHandler.h>
 #endif
@@ -70,7 +70,7 @@ struct NetworkProcessCreationParameters {
     String containerTemporaryDirectory;
 #endif
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     WebCore::HTTPCookieAcceptPolicy cookieAcceptPolicy { WebCore::HTTPCookieAcceptPolicy::AlwaysAccept };
     Vector<String> languages;
     std::optional<MemoryPressureHandler::Configuration> memoryPressureHandlerConfiguration;

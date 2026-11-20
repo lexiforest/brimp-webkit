@@ -104,7 +104,7 @@ class WebCore::HTTPHeaderMap {
     String localizedDescription;
     WebCore::ResourceError::IsSanitized isSanitized;
 #endif // !PLATFORM(COCOA)
-#if USE(SOUP)
+#if USE(SOUP) || USE(CURL)
     WebCore::CertificateInfo certificateInfo;
 #endif // USE(SOUP)
 };

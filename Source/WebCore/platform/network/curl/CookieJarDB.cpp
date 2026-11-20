@@ -196,7 +196,7 @@ void CookieJarDB::verifySchemaVersion()
         return;
 
     auto statement = m_database.prepareStatement("PRAGMA user_version"_s);
-    int version = statement ? statement->columnInt(0) : 0;
+    int version = statement && statement->step() == SQLITE_ROW ? statement->columnInt(0) : 0;
     if (version == schemaVersion)
         return;
 
@@ -520,7 +520,7 @@ bool CookieJarDB::canAcceptCookie(const Cookie& cookie, const URL& firstParty, c
 bool CookieJarDB::setCookie(const Cookie& cookie)
 {
     auto expires = cookie.expires.value_or(0.0);
-    if (!cookie.session && MonotonicTime::fromRawSeconds(expires / msPerSecond) <= MonotonicTime::now())
+    if (!cookie.session && WallTime::fromRawSeconds(expires / msPerSecond) <= WallTime::now())
         return deleteCookieInternal(cookie.name, cookie.domain, cookie.path);
 
     auto& statement = preparedStatement(SET_COOKIE_SQL);

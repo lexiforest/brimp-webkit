@@ -45,6 +45,11 @@
 
 #include <curl/curl.h>
 
+#if PLATFORM(GTK)
+#include <gio/gio.h>
+#include <wtf/glib/GRefPtr.h>
+#endif
+
 namespace WebCore {
 
 // Values taken from http://www.browserscope.org/ following
@@ -285,6 +290,9 @@ public:
     void setSslECCurves(const char*);
 
     void enableProxyIfExists();
+#if PLATFORM(GTK)
+    bool applyProxyResolver(GProxyResolver*, const URL& credentialURL = { }, const String& user = { }, const String& password = { });
+#endif
 
     void setDnsCacheTimeout(Seconds);
     void setConnectTimeout(Seconds);
@@ -338,6 +346,9 @@ private:
     char m_errorBuffer[CURL_ERROR_SIZE] { };
 
     URL m_url;
+#if PLATFORM(GTK)
+    URL m_proxyURL;
+#endif
     CurlSList m_localhostAlias;
     CurlSList m_requestHeaders;
 

@@ -35,7 +35,7 @@
 #include <objc/objc.h>
 #endif
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 typedef struct _SoupCookie SoupCookie;
 #endif
 
@@ -50,7 +50,7 @@ struct Cookie {
 #ifdef __OBJC__
     WEBCORE_EXPORT Cookie(NSHTTPCookie *);
     WEBCORE_EXPORT RetainPtr<NSHTTPCookie> createNSHTTPCookie() const;
-#elif USE(SOUP)
+#elif USE(SOUP) || PLATFORM(GTK)
     explicit Cookie(SoupCookie*);
     SoupCookie* toSoupCookie() const;
 #endif

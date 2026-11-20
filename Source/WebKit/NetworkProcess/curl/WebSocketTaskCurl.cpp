@@ -61,7 +61,16 @@ WebSocketTask::WebSocketTask(NetworkSocketChannel& channel, WebPageProxyIdentifi
     if (networkSession() && networkSession()->networkProcess().localhostAliasesForTesting().contains<StringViewHashTranslator>(m_request.url().host()))
         localhostAlias = WebCore::CurlStream::LocalhostAlias::Enable;
 
-    m_streamID = m_scheduler.createStream(request.url(), *this, WebCore::CurlStream::ServerTrustEvaluation::Enable, localhostAlias);
+    auto trust = WebCore::CurlStream::ServerTrustEvaluation::Enable;
+#if PLATFORM(GTK)
+    if (networkSession() && networkSession()->ignoreTLSErrors())
+        trust = WebCore::CurlStream::ServerTrustEvaluation::Disable;
+#endif
+    m_streamID = m_scheduler.createStream(request.url(), *this, trust, localhostAlias
+#if PLATFORM(GTK)
+        , networkSession() ? networkSession()->proxyResolver() : nullptr
+#endif
+    );
 }
 
 WebSocketTask::~WebSocketTask()
@@ -261,23 +270,39 @@ void WebSocketTask::didFail(WebCore::CurlStreamID, CURLcode errorCode, WebCore::
     if (errorCode == CURLE_PEER_FAILED_VERIFICATION && networkSession()) {
         RELEASE_ASSERT(m_state == State::Connecting);
         destructStream();
-
+#if PLATFORM(GTK)
+        if (networkSession()->isCertificateAllowed(certificateInfo, m_request.url().host().toString())) {
+            reconnectWithoutServerTrustEvaluation();
+            return;
+        }
+        didFail(WTF::move(reason));
+#else
         tryServerTrustEvaluation({ m_request.url(), WTF::move(certificateInfo), WebCore::ResourceError(errorCode, m_request.url()) }, WTF::move(reason));
+#endif
         return;
     }
 
     didFail(WTF::move(reason));
 }
 
+void WebSocketTask::reconnectWithoutServerTrustEvaluation()
+{
+    auto localhostAlias = WebCore::CurlStream::LocalhostAlias::Disable;
+    if (networkSession() && networkSession()->networkProcess().localhostAliasesForTesting().contains<StringViewHashTranslator>(m_request.url().host()))
+        localhostAlias = WebCore::CurlStream::LocalhostAlias::Enable;
+
+    m_streamID = m_scheduler.createStream(m_request.url(), *this, WebCore::CurlStream::ServerTrustEvaluation::Disable, localhostAlias
+#if PLATFORM(GTK)
+        , networkSession() ? networkSession()->proxyResolver() : nullptr
+#endif
+    );
+}
+
 void WebSocketTask::tryServerTrustEvaluation(WebCore::AuthenticationChallenge&& challenge, String&& errorReason)
 {
     networkSession()->didReceiveChallenge(*this, WTF::move(challenge), [this, errorReason = WTF::move(errorReason)](WebKit::AuthenticationChallengeDisposition disposition, const WebCore::Credential& credential) mutable {
         if (disposition == AuthenticationChallengeDisposition::UseCredential && !credential.isEmpty()) {
-            auto localhostAlias = WebCore::CurlStream::LocalhostAlias::Disable;
-            if (networkSession() && networkSession()->networkProcess().localhostAliasesForTesting().contains<StringViewHashTranslator>(m_request.url().host()))
-                localhostAlias = WebCore::CurlStream::LocalhostAlias::Enable;
-
-            m_streamID = m_scheduler.createStream(m_request.url(), *this, WebCore::CurlStream::ServerTrustEvaluation::Disable, localhostAlias);
+            reconnectWithoutServerTrustEvaluation();
         } else
             didFail(WTF::move(errorReason));
     });

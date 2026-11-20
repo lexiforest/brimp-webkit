@@ -36,6 +36,9 @@
 #include "HTTPHeaderMap.h"
 #include <NetworkLoadMetrics.h>
 #include <mutex>
+#if PLATFORM(GTK)
+#include <wtf/glib/GUniquePtr.h>
+#endif
 #include <wtf/FileSystem.h>
 #include <wtf/MainThread.h>
 #include <wtf/NeverDestroyed.h>
@@ -294,6 +297,12 @@ CURLMsg* CurlMultiHandle::readInfo(int& messagesInQueue)
 CurlHandle::CurlHandle()
 {
     m_handle = curl_easy_init();
+    RELEASE_ASSERT(m_handle);
+#if USE(CURL_IMPERSONATE)
+    // WebKit owns HTTP headers and cookies; impersonate the transport only.
+    // Each easy handle must receive the profile, including redirects and streams.
+    RELEASE_ASSERT(curl_easy_impersonate(m_handle, "safari270", 0) == CURLE_OK);
+#endif
     curl_easy_setopt(m_handle, CURLOPT_ERRORBUFFER, m_errorBuffer);
     curl_easy_setopt(m_handle, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(m_handle, CURLOPT_COOKIEFILE, nullptr);
@@ -306,7 +315,9 @@ CurlHandle::CurlHandle()
     setDnsCacheTimeout(CurlContext::singleton().dnsCacheTimeout());
     setConnectTimeout(CurlContext::singleton().connectTimeout());
 
+#if !PLATFORM(GTK)
     enableProxyIfExists();
+#endif
 
 #ifndef NDEBUG
     enableVerboseIfUsed();
@@ -336,7 +347,8 @@ void CurlHandle::enableSSL()
         setSslVerifyHost(CurlHandle::VerifyHost::StrictNameCheck);
     }
 
-    setSslCipherList(sslHandle.cipherList().data());
+    if (!sslHandle.cipherList().isNull())
+        setSslCipherList(sslHandle.cipherList().data());
 
     if (const auto& ecCurves = sslHandle.ecCurves(); !ecCurves.isNull())
         setSslECCurves(ecCurves.data());
@@ -479,6 +491,11 @@ void CurlHandle::enableRequestHeaders()
 
 void CurlHandle::enableHttp()
 {
+#if USE(CURL_IMPERSONATE)
+    // Preserve the profile's HTTP version and ALPN choices.
+    curl_easy_setopt(m_handle, CURLOPT_PIPEWAIT, 1L);
+    return;
+#endif
     auto isHttp2Enabled = CurlContext::singleton().isHttp2Enabled();
     auto isHttp3Enabled = CurlContext::singleton().isHttp3Enabled();
 
@@ -624,6 +641,29 @@ void CurlHandle::enableProxyIfExists()
     }
 }
 
+#if PLATFORM(GTK)
+bool CurlHandle::applyProxyResolver(GProxyResolver* resolver, const URL& credentialURL, const String& user, const String& password)
+{
+    if (!resolver)
+        return false;
+    GUniquePtr<char*> proxies(g_proxy_resolver_lookup(resolver, m_url.string().utf8().data(), nullptr, nullptr));
+    if (!proxies || !proxies.get()[0])
+        return false;
+    const char* proxy = proxies.get()[0];
+    bool direct = !strcmp(proxy, "direct://");
+    m_proxyURL = direct ? URL { } : URL { String::fromUTF8(proxy) };
+    curl_easy_setopt(m_handle, CURLOPT_PROXY, direct ? "" : proxy);
+    curl_easy_setopt(m_handle, CURLOPT_PROXYAUTH, CURLAUTH_ANY);
+    if (!credentialURL.isEmpty() && protocolHostAndPortAreEqual(m_proxyURL, credentialURL)) {
+        curl_easy_setopt(m_handle, CURLOPT_PROXYUSERNAME, user.utf8().data());
+        curl_easy_setopt(m_handle, CURLOPT_PROXYPASSWORD, password.utf8().data());
+    }
+    // GProxyResolver already applied the session's bypass rules.
+    curl_easy_setopt(m_handle, CURLOPT_NOPROXY, "");
+    return true;
+}
+#endif
+
 static CURLoption safeTimeValue(double time)
 {
     auto value = static_cast<unsigned>(time >= 0.0 ? time : 0);
@@ -691,11 +731,15 @@ void CurlHandle::enableConnectionOnly()
 
 std::optional<String> CurlHandle::getProxyUrl()
 {
+#if PLATFORM(GTK)
+    return m_proxyURL.isEmpty() ? std::nullopt : std::optional<String>(m_proxyURL.string());
+#else
     auto& proxy = CurlContext::singleton().proxySettings();
     if (proxy.mode() == CurlProxySettings::Mode::Default)
         return std::nullopt;
 
     return proxy.url();
+#endif
 }
 
 std::optional<long> CurlHandle::getResponseCode()

@@ -3529,6 +3529,24 @@ WebKitWebsiteDataManager* webkit_web_view_get_website_data_manager(WebKitWebView
 }
 #endif
 
+// Brimp local embedding SPI. Closing the page cannot wait for GTK widget
+// finalization, which may be delayed by outstanding UI references.
+void webkit_web_view_close(WebKitWebView* webView, GCancellable* cancellable, GAsyncReadyCallback callback, gpointer userData)
+{
+    g_return_if_fail(WEBKIT_IS_WEB_VIEW(webView));
+    GRefPtr<GTask> task = adoptGRef(g_task_new(webView, cancellable, callback, userData));
+    getPage(webView).close([task = WTF::move(task)] {
+        g_task_return_boolean(task.get(), TRUE);
+    });
+}
+
+gboolean webkit_web_view_close_finish(WebKitWebView* webView, GAsyncResult* result, GError** error)
+{
+    g_return_val_if_fail(WEBKIT_IS_WEB_VIEW(webView), FALSE);
+    g_return_val_if_fail(g_task_is_valid(result, webView), FALSE);
+    return g_task_propagate_boolean(G_TASK(result), error);
+}
+
 /**
  * webkit_web_view_try_close:
  * @web_view: a #WebKitWebView

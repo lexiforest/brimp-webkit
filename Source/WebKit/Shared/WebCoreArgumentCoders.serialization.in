@@ -53,7 +53,7 @@ header: <WebCore/ResourceError.h>
 
 header: <WebCore/VideoCodecType.h>
 
-#if USE(SOUP)
+#if USE(GLIB)
 header: "ArgumentCodersGLib.h"
 #endif
 

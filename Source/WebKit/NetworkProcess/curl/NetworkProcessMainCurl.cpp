@@ -29,11 +29,22 @@
 #include "AuxiliaryProcessMain.h"
 #include "NetworkProcess.h"
 #include "NetworkSession.h"
+#if USE(GCRYPT)
+#include <pal/crypto/gcrypt/Initialization.h>
+#endif
 
 namespace WebKit {
 
 class NetworkProcessMainCurl final: public AuxiliaryProcessMainBaseNoSingleton<NetworkProcess> {
 public:
+    bool platformInitialize() override
+    {
+#if USE(GCRYPT)
+        PAL::GCrypt::initialize();
+#endif
+        return true;
+    }
+
     void platformFinalize() override
     {
         Vector<PAL::SessionID> sessionIDs;

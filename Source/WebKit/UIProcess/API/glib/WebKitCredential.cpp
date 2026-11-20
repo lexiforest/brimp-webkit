@@ -157,7 +157,12 @@ WebKitCredential* webkit_credential_new_for_certificate(GTlsCertificate* certifi
         persistence = WEBKIT_CREDENTIAL_PERSISTENCE_FOR_SESSION;
     }
 
+#if USE(SOUP)
     return webkitCredentialCreate(WebCore::Credential(certificate, toWebCoreCredentialPersistence(persistence)));
+#else
+    g_warning("Client certificate credentials are not supported by the curl backend");
+    return nullptr;
+#endif
 }
 
 /**
@@ -262,7 +267,11 @@ GTlsCertificate* webkit_credential_get_certificate(WebKitCredential* credential)
 {
     g_return_val_if_fail(credential, NULL);
 
+#if USE(SOUP)
     return credential->credential.certificate();
+#else
+    return nullptr;
+#endif
 }
 
 /**

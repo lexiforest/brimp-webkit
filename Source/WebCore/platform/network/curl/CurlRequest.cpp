@@ -192,6 +192,11 @@ CURL* CurlRequest::setupTransfer()
     m_curlHandle = makeUnique<CurlHandle>();
 
     m_curlHandle->setURL(m_request.url(), m_localhostAlias);
+#if PLATFORM(GTK)
+    // Resolve on the curl worker, never block the UI/network main loop.
+    if (!m_curlHandle->applyProxyResolver(m_proxyResolver.get(), m_proxyCredentialURL, m_proxyUser, m_proxyPassword))
+        return nullptr;
+#endif
 
     m_curlHandle->appendRequestHeaders(httpHeaderFields);
 
@@ -333,8 +338,10 @@ size_t CurlRequest::didReceiveHeader(String&& header)
     if (auto version = m_curlHandle->getHttpVersion())
         m_response.httpVersion = *version;
 
+#if !PLATFORM(GTK)
     if (m_response.availableProxyAuth)
         CurlContext::singleton().setProxyAuthMethod(m_response.availableProxyAuth);
+#endif
 
     if (auto info = m_curlHandle->certificateInfo())
         m_response.certificateInfo = WTF::move(*info);

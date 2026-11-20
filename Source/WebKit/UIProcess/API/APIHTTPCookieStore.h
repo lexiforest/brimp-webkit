@@ -35,7 +35,7 @@
 #include <wtf/WeakPtr.h>
 #include <wtf/WorkQueue.h>
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 #include "SoupCookiePersistentStorageType.h"
 #endif
 
@@ -88,7 +88,7 @@ public:
 
     bool isOptInCookiePartitioningEnabled() const;
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     void replaceCookies(Vector<WebCore::Cookie>&&, CompletionHandler<void()>&&);
     void getAllCookies(CompletionHandler<void(const Vector<WebCore::Cookie>&)>&&);
 

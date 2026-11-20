@@ -2,6 +2,16 @@ include(GLibMacros)
 include(InspectorGResources.cmake)
 include(ModernMediaControlsGResources.cmake)
 include(Platform/Skia.cmake)
+include(Platform/Curl.cmake)
+# Retain GLib's cache I/O on the GTK port.
+list(REMOVE_ITEM WebKit_SOURCES
+    NetworkProcess/cache/NetworkCacheDataCurl.cpp
+    NetworkProcess/cache/NetworkCacheIOChannelCurl.cpp
+    UIProcess/WebsiteData/curl/WebsiteDataStoreCurl.cpp
+    UIProcess/API/C/curl/WKWebsiteDataStoreRefCurl.cpp
+)
+list(APPEND WebKit_SOURCES UIProcess/WebsiteData/soup/WebsiteDataStoreSoup.cpp)
+list(REMOVE_ITEM WebKit_PUBLIC_FRAMEWORK_HEADERS UIProcess/API/C/curl/WKWebsiteDataStoreRefCurl.h)
 
 if (ENABLE_PDFJS)
     include(PdfJSGResources.cmake)
@@ -71,6 +81,7 @@ if (USE_GBM)
 endif ()
 
 list(APPEND WebKit_SERIALIZATION_IN_FILES
+    Shared/soup/WebCoreArgumentCodersSoup.serialization.in
     Shared/glib/AvailableInputDevices.serialization.in
     Shared/glib/DMABufBufferAttributes.serialization.in
     Shared/glib/InputMethodState.serialization.in
@@ -81,13 +92,11 @@ list(APPEND WebKit_SERIALIZATION_IN_FILES
     Shared/glib/SystemSettings.serialization.in
     Shared/glib/UserMessage.serialization.in
 
-    Shared/soup/WebCoreArgumentCodersSoup.serialization.in
 )
 
 list(APPEND WebKit_DERIVED_SOURCES
     ${WebKitGTK_DERIVED_SOURCES_DIR}/InspectorGResourceBundle.c
     ${WebKitGTK_DERIVED_SOURCES_DIR}/ModernMediaControlsGResourceBundle.c
-    ${WebKitGTK_DERIVED_SOURCES_DIR}/WebKitDirectoryInputStreamData.cpp
     ${WebKitGTK_DERIVED_SOURCES_DIR}/WebKitResourcesGResourceBundle.c
 
     ${WebKitGTK_DERIVED_SOURCES_DIR}/webkit/WebKitEnumTypes.cpp
@@ -111,19 +120,6 @@ if (ENABLE_PDFJS)
 
     WEBKIT_BUILD_PDFJS_GRESOURCES(${WebKitGTK_DERIVED_SOURCES_DIR})
 endif ()
-
-set(WebKit_DirectoryInputStream_DATA
-    ${WEBKIT_DIR}/NetworkProcess/soup/Resources/directory.css
-    ${WEBKIT_DIR}/NetworkProcess/soup/Resources/directory.js
-)
-
-add_custom_command(
-    OUTPUT ${WebKitGTK_DERIVED_SOURCES_DIR}/WebKitDirectoryInputStreamData.cpp ${WebKitGTK_DERIVED_SOURCES_DIR}/WebKitDirectoryInputStreamData.h
-    MAIN_DEPENDENCY ${WEBCORE_DIR}/css/make-css-file-arrays.pl
-    DEPENDS ${WebKit_DirectoryInputStream_DATA}
-    COMMAND ${PERL_EXECUTABLE} ${WEBCORE_DIR}/css/make-css-file-arrays.pl --defines "${FEATURE_DEFINES_WITH_SPACE_SEPARATOR}" ${WebKitGTK_DERIVED_SOURCES_DIR}/WebKitDirectoryInputStreamData.h ${WebKitGTK_DERIVED_SOURCES_DIR}/WebKitDirectoryInputStreamData.cpp ${WebKit_DirectoryInputStream_DATA}
-    VERBATIM
-)
 
 list(APPEND WebKit_PUBLIC_FRAMEWORK_HEADERS
     UIProcess/gtk/GtkVersioning.h

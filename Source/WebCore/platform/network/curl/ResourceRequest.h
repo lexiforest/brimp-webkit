@@ -29,6 +29,11 @@
 
 #include <WebCore/ResourceRequestBase.h>
 
+#if PLATFORM(GTK)
+#include <libsoup/soup.h>
+#include <wtf/glib/GRefPtr.h>
+#endif
+
 namespace WebCore {
 
 class ResourceRequest : public ResourceRequestBase {
@@ -63,6 +68,12 @@ public:
     WEBCORE_EXPORT ResourceRequestBase::RequestData getRequestDataToSerialize() const;
 
     WEBCORE_EXPORT void updateFromDelegatePreservingOldProperties(const ResourceRequest&);
+
+#if PLATFORM(GTK)
+    WEBCORE_EXPORT GRefPtr<GInputStream> createBodyStream() const;
+    WEBCORE_EXPORT void updateSoupMessageHeaders(SoupMessageHeaders*) const;
+    WEBCORE_EXPORT void updateFromSoupMessageHeaders(SoupMessageHeaders*);
+#endif
 
 private:
     friend class ResourceRequestBase;

@@ -1252,7 +1252,7 @@ bool URL::isIPv6Address(StringView string)
     return (count == 8 && skipState == None) || skipState == Skipped || skipState == Final;
 }
 
-#if !PLATFORM(COCOA) && !USE(SOUP)
+#if !PLATFORM(COCOA) && !USE(GLIB)
 
 bool URL::hostIsIPAddress(StringView host)
 {

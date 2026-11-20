@@ -28,6 +28,15 @@
 #include "AuthenticationChallengeDisposition.h"
 #include "NetworkSession.h"
 
+#if PLATFORM(GTK)
+#include "SoupCookiePersistentStorageType.h"
+#include <WebCore/SoupNetworkProxySettings.h>
+#include <WebCore/CertificateInfo.h>
+#include <gio/gio.h>
+#include <wtf/glib/GRefPtr.h>
+#include <wtf/text/StringHash.h>
+#endif
+
 namespace WebKit {
 
 struct NetworkSessionCreationParameters;
@@ -43,11 +52,26 @@ public:
     ~NetworkSessionCurl();
 
     void clearAlternativeServices(WallTime) override;
+#if PLATFORM(GTK)
+    void setIgnoreTLSErrors(bool value) { m_ignoreTLSErrors = value; }
+    bool ignoreTLSErrors() const { return m_ignoreTLSErrors; }
+    void setProxySettings(const WebCore::SoupNetworkProxySettings&);
+    GProxyResolver* proxyResolver() const { return m_proxyResolver.get(); }
+    void setCookiePersistentStorage(const String&, SoupCookiePersistentStorageType);
+    void allowSpecificHTTPSCertificateForHost(const WebCore::CertificateInfo&, const String&);
+    bool isCertificateAllowed(const WebCore::CertificateInfo&, const String&) const;
+    void setPersistentCredentialStorageEnabled(bool);
+#endif
 
     void didReceiveChallenge(WebSocketTask&, WebCore::AuthenticationChallenge&&, CompletionHandler<void(WebKit::AuthenticationChallengeDisposition, const WebCore::Credential&)>&&);
 
 private:
-    RefPtr<WebSocketTask> createWebSocketTask(WebPageProxyIdentifier, std::optional<WebCore::FrameIdentifier>, std::optional<WebCore::PageIdentifier>, NetworkSocketChannel&, const WebCore::ResourceRequest&, const String& protocol, const WebCore::ClientOrigin&, bool, bool, OptionSet<WebCore::AdvancedPrivacyProtections>, WebCore::StoredCredentialsPolicy, WebCore::IsInitiatedByDedicatedWorker) final;
+#if PLATFORM(GTK)
+    bool m_ignoreTLSErrors { false };
+    GRefPtr<GProxyResolver> m_proxyResolver;
+    HashMap<String, WebCore::CertificateInfo::Certificate> m_allowedCertificates;
+#endif
+    RefPtr<WebSocketTask> createWebSocketTask(WebPageProxyIdentifier, std::optional<WebCore::FrameIdentifier>, std::optional<WebCore::PageIdentifier>, NetworkSocketChannel&, WebCore::ResourceRequest&&, const String& protocol, const WebCore::ClientOrigin&, bool, bool, OptionSet<WebCore::AdvancedPrivacyProtections>, WebCore::StoredCredentialsPolicy, WebCore::IsInitiatedByDedicatedWorker) final;
 };
 
 } // namespace WebKit

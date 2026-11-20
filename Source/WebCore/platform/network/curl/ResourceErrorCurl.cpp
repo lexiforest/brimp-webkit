@@ -48,7 +48,7 @@ ResourceError ResourceError::fromIPCData(std::optional<IPCData>&& ipcData)
     if (!ipcData)
         return { };
 
-    return {
+    ResourceError result {
         ipcData->domain,
         ipcData->errorCode,
         ipcData->failingURL,
@@ -56,6 +56,8 @@ ResourceError ResourceError::fromIPCData(std::optional<IPCData>&& ipcData)
         ipcData->type,
         ipcData->isSanitized
     };
+    result.m_certificateInfo = WTF::move(ipcData->certificateInfo);
+    return result;
 }
 
 auto ResourceError::ipcData() const -> std::optional<IPCData>
@@ -69,7 +71,8 @@ auto ResourceError::ipcData() const -> std::optional<IPCData>
         errorCode(),
         failingURL(),
         localizedDescription(),
-        m_isSanitized
+        m_isSanitized,
+        m_certificateInfo
     };
 }
 
@@ -78,13 +81,14 @@ bool ResourceError::isCertificationVerificationError() const
     return domain() == curlErrorDomain() && errorCode() == CURLE_PEER_FAILED_VERIFICATION;
 }
 
-void ResourceError::doPlatformIsolatedCopy(const ResourceError&)
+void ResourceError::doPlatformIsolatedCopy(const ResourceError& other)
 {
+    m_certificateInfo = other.m_certificateInfo.isolatedCopy();
 }
 
-bool ResourceError::platformCompare(const ResourceError&, const ResourceError&)
+bool ResourceError::platformCompare(const ResourceError& a, const ResourceError& b)
 {
-    return true;
+    return a.m_certificateInfo == b.m_certificateInfo;
 }
 
 } // namespace WebCore

@@ -324,6 +324,17 @@ void WebKitAutomationClient::requestAutomationSession(const String& sessionIdent
     m_webContext->priv->processPool->setAutomationSession(&webkitAutomationSessionGetSession(m_webContext->priv->automationSession.get()));
 }
 
+WebKitAutomationSession* webkit_web_context_create_local_automation_session(WebKitWebContext* context, const char* id)
+{
+    g_return_val_if_fail(WEBKIT_IS_WEB_CONTEXT(context), nullptr);
+    g_return_val_if_fail(id && *id, nullptr);
+    g_return_val_if_fail(webkit_web_context_is_automation_allowed(context), nullptr);
+    g_return_val_if_fail(!context->priv->automationSession, nullptr);
+    context->priv->automationSession = adoptGRef(webkitAutomationSessionCreate(context, id, { }));
+    context->priv->processPool->setAutomationSession(&webkitAutomationSessionGetSession(context->priv->automationSession.get()));
+    return WEBKIT_AUTOMATION_SESSION(g_object_ref(context->priv->automationSession.get()));
+}
+
 void webkitWebContextWillCloseAutomationSession(WebKitWebContext* webContext)
 {
     if (!webContext->priv->automationSession)

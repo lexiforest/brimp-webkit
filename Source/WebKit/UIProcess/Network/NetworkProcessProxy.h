@@ -453,7 +453,7 @@ private:
 
     void processAuthenticationChallenge(PAL::SessionID, Ref<AuthenticationChallengeProxy>&&);
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     void didExceedMemoryLimit();
 #endif
 

@@ -44,7 +44,11 @@ CurlStreamScheduler::~CurlStreamScheduler()
     ASSERT(isMainThread());
 }
 
-CurlStreamID CurlStreamScheduler::createStream(const URL& url, CurlStream::Client& client, CurlStream::ServerTrustEvaluation serverTrustEvaluation, CurlStream::LocalhostAlias localhostAlias)
+CurlStreamID CurlStreamScheduler::createStream(const URL& url, CurlStream::Client& client, CurlStream::ServerTrustEvaluation serverTrustEvaluation, CurlStream::LocalhostAlias localhostAlias
+#if PLATFORM(GTK)
+    , GRefPtr<GProxyResolver> proxyResolver
+#endif
+)
 {
     ASSERT(isMainThread());
 
@@ -55,8 +59,16 @@ CurlStreamID CurlStreamScheduler::createStream(const URL& url, CurlStream::Clien
     auto streamID = m_currentStreamID;
     m_clientList.add(streamID, &client);
 
-    callOnWorkerThread([this, streamID, url = url.isolatedCopy(), serverTrustEvaluation, localhostAlias]() mutable {
-        m_streamList.add(streamID, CurlStream::create(*this, streamID, WTF::move(url), serverTrustEvaluation, localhostAlias));
+    callOnWorkerThread([this, streamID, url = url.isolatedCopy(), serverTrustEvaluation, localhostAlias
+#if PLATFORM(GTK)
+        , proxyResolver = WTF::move(proxyResolver)
+#endif
+    ]() mutable {
+        m_streamList.add(streamID, CurlStream::create(*this, streamID, WTF::move(url), serverTrustEvaluation, localhostAlias
+#if PLATFORM(GTK)
+            , WTF::move(proxyResolver)
+#endif
+        ));
     });
 
     return streamID;

@@ -65,6 +65,12 @@ webkit_uri_request_get_http_method  (WebKitURIRequest *request);
 WEBKIT_API SoupMessageHeaders *
 webkit_uri_request_get_http_headers (WebKitURIRequest *request);
 
+/* Brimp navigation SPI. Body bytes are copied into the ResourceRequest. */
+WEBKIT_API void
+webkit_uri_request_set_http_method (WebKitURIRequest *request, const char *method);
+WEBKIT_API void
+webkit_uri_request_set_http_body (WebKitURIRequest *request, GBytes *body);
+
 G_END_DECLS
 
 #endif

@@ -21,6 +21,7 @@
 #include "WebKitAutomationSession.h"
 
 #include "APIAutomationSessionClient.h"
+#include <JavaScriptCore/InspectorFrontendChannel.h>
 #include "WebKitApplicationInfo.h"
 #include "WebKitAutomationSessionPrivate.h"
 #include "WebKitNetworkProxySettingsPrivate.h"
@@ -63,6 +64,7 @@ enum {
 enum {
     CREATE_WEB_VIEW,
     WILL_CLOSE,
+    MESSAGE_TO_FRONTEND,
 
     LAST_SIGNAL
 };
@@ -72,6 +74,9 @@ struct _WebKitAutomationSessionPrivate {
     WebKitApplicationInfo* applicationInfo;
     WebKitWebContext* webContext;
     CString id;
+#if ENABLE(REMOTE_INSPECTOR)
+    std::unique_ptr<Inspector::FrontendChannel> localChannel;
+#endif
 };
 
 static std::array<unsigned, LAST_SIGNAL> signals;
@@ -87,6 +92,15 @@ public:
     }
 
 private:
+    bool shouldEnableInspectorProtocol(WebAutomationSession&) override
+    {
+#if ENABLE(REMOTE_INSPECTOR)
+        return !!m_session->priv->localChannel;
+#else
+        return false;
+#endif
+    }
+
     String sessionIdentifier() const override
     {
         return String::fromUTF8(m_session->priv->id.data());
@@ -258,6 +272,12 @@ static void webkitAutomationSessionDispose(GObject* object)
     WebKitAutomationSession* session = WEBKIT_AUTOMATION_SESSION(object);
 
     session->priv->session->setClient(nullptr);
+#if ENABLE(REMOTE_INSPECTOR)
+    if (session->priv->localChannel) {
+        session->priv->session->disconnect(*session->priv->localChannel);
+        session->priv->localChannel = nullptr;
+    }
+#endif
 
     if (session->priv->applicationInfo) {
         webkit_application_info_unref(session->priv->applicationInfo);
@@ -274,6 +294,12 @@ static void webkit_automation_session_class_init(WebKitAutomationSessionClass* s
     gObjectClass->set_property = webkitAutomationSessionSetProperty;
     gObjectClass->constructed = webkitAutomationSessionConstructed;
     gObjectClass->dispose = webkitAutomationSessionDispose;
+
+    // Local protocol output is synchronous on the UI thread. Embedders own
+    // message framing and must not block this signal handler on pipe writes.
+    signals[MESSAGE_TO_FRONTEND] = g_signal_new("message-to-frontend",
+        G_TYPE_FROM_CLASS(sessionClass), G_SIGNAL_RUN_LAST, 0, nullptr, nullptr,
+        g_cclosure_marshal_generic, G_TYPE_NONE, 1, G_TYPE_STRING);
 
     /**
      * WebKitAutomationSession:id:
@@ -522,3 +548,52 @@ WebKitApplicationInfo* webkit_automation_session_get_application_info(WebKitAuto
 
     return session->priv->applicationInfo;
 }
+
+#if ENABLE(REMOTE_INSPECTOR)
+class LocalAutomationFrontend final : public Inspector::FrontendChannel {
+    WTF_MAKE_TZONE_ALLOCATED_INLINE(LocalAutomationFrontend);
+public:
+    explicit LocalAutomationFrontend(WebKitAutomationSession* session)
+        : m_session(session) { }
+    ConnectionType connectionType() const final { return ConnectionType::Local; }
+    void sendMessageToFrontend(const String& message) final
+    {
+        g_signal_emit(m_session, signals[MESSAGE_TO_FRONTEND], 0, message.utf8().data());
+    }
+private:
+    WebKitAutomationSession* m_session;
+};
+
+void webkit_automation_session_connect_local(WebKitAutomationSession* session)
+{
+    g_return_if_fail(WEBKIT_IS_AUTOMATION_SESSION(session));
+    g_return_if_fail(!session->priv->localChannel);
+    session->priv->localChannel = makeUnique<LocalAutomationFrontend>(session);
+    session->priv->session->connect(*session->priv->localChannel);
+}
+
+void webkit_automation_session_disconnect_local(WebKitAutomationSession* session)
+{
+    g_return_if_fail(WEBKIT_IS_AUTOMATION_SESSION(session));
+    if (!session->priv->localChannel)
+        return;
+    auto channel = WTF::move(session->priv->localChannel);
+    session->priv->session->disconnect(*channel);
+}
+
+void webkit_automation_session_dispatch_message(WebKitAutomationSession* session, const char* message)
+{
+    g_return_if_fail(WEBKIT_IS_AUTOMATION_SESSION(session));
+    g_return_if_fail(session->priv->localChannel && message);
+    session->priv->session->dispatchMessageFromRemote(String::fromUTF8(message));
+}
+
+char* webkit_automation_session_register_web_view(WebKitAutomationSession* session, WebKitWebView* view)
+{
+    g_return_val_if_fail(WEBKIT_IS_AUTOMATION_SESSION(session), nullptr);
+    g_return_val_if_fail(WEBKIT_IS_WEB_VIEW(view), nullptr);
+    g_return_val_if_fail(webkit_web_view_get_context(view) == session->priv->webContext, nullptr);
+    auto handle = session->priv->session->handleForWebPageProxy(webkitWebViewGetPage(view));
+    return g_strdup(handle.utf8().data());
+}
+#endif

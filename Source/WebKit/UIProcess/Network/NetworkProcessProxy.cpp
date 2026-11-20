@@ -1840,7 +1840,7 @@ void NetworkProcessProxy::clearBundleIdentifier(CompletionHandler<void()>&& comp
     sendWithAsyncReply(Messages::NetworkProcess::ClearBundleIdentifier(), WTF::move(completionHandler));
 }
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 void NetworkProcessProxy::didExceedMemoryLimit()
 {
     AuxiliaryProcessProxy::terminate();

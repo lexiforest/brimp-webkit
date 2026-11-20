@@ -3,7 +3,26 @@ include(platform/GCrypt.cmake)
 include(platform/GStreamer.cmake)
 include(platform/ImageDecoders.cmake)
 include(platform/Skia.cmake)
-include(platform/Soup.cmake)
+include(platform/Curl.cmake)
+# GTK exposes SoupCookie and SoupMessageHeaders as API data types, not transport.
+list(APPEND WebCore_SOURCES
+    platform/network/soup/CookieSoup.cpp
+    platform/network/soup/URLSoup.cpp
+    platform/network/soup/WebKitAutoconfigProxyResolver.cpp
+    platform/network/soup/WebKitFormDataInputStream.cpp
+    platform/network/glib/CurlSSLHandleGLib.cpp
+    platform/network/glib/CurlAPIDataGLib.cpp
+    platform/network/glib/CertificateInfoCurlGLib.cpp
+)
+list(REMOVE_ITEM WebCore_SOURCES platform/network/curl/DNSResolveQueueCurl.cpp)
+list(APPEND WebCore_PRIVATE_FRAMEWORK_HEADERS
+    platform/network/soup/GUniquePtrSoup.h
+    platform/network/soup/URLSoup.h
+    platform/network/soup/SoupNetworkProxySettings.h
+    platform/network/soup/WebKitAutoconfigProxyResolver.h
+    platform/network/soup/WebKitFormDataInputStream.h
+)
+list(APPEND WebCore_LIBRARIES Soup3::Soup3)
 include(platform/TextureMapper.cmake)
 
 list(APPEND WebCore_UNIFIED_SOURCE_LIST_FILES

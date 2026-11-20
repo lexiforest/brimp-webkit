@@ -55,7 +55,7 @@ WebCore::ResourceError httpNavigationWithHTTPSOnlyError(const WebCore::ResourceR
 bool isHttpNavigationWithHTTPSOnlyError(const WebCore::ResourceError&);
 WebCore::ResourceError pluginWillHandleLoadError(const WebCore::ResourceResponse&);
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 WebCore::ResourceError downloadNetworkError(const URL&, const WTF::String&);
 WebCore::ResourceError downloadCancelledByUserError(const WebCore::ResourceResponse&);
 WebCore::ResourceError downloadDestinationError(const WebCore::ResourceResponse&, const WTF::String&);

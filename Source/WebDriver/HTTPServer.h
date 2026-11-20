@@ -29,7 +29,7 @@
 #include <wtf/Vector.h>
 #include <wtf/text/WTFString.h>
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
 #include <wtf/glib/GRefPtr.h>
 typedef struct _SoupServer SoupServer;
 #elif USE(INSPECTOR_SOCKET_SERVER)
@@ -103,7 +103,7 @@ private:
     HTTPRequestHandler& m_requestHandler;
     String m_visibleHost;
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     GRefPtr<SoupServer> m_soupServer;
 #endif
 

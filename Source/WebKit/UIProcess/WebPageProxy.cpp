@@ -1900,8 +1900,15 @@ void WebPageProxy::initializeWebPage(const Site& site, WebCore::SandboxFlags eff
 
 void WebPageProxy::close()
 {
-    if (m_isClosed)
+    close([] { });
+}
+
+void WebPageProxy::close(CompletionHandler<void()>&& completionHandler)
+{
+    if (m_isClosed) {
+        completionHandler();
         return;
+    }
 
     WEBPAGEPROXY_RELEASE_LOG(Loading, "close:");
 
@@ -1998,9 +2005,9 @@ void WebPageProxy::close()
         });
     });
     // Delay sending close message to next runloop cycle to avoid white flash.
-    RunLoop::currentSingleton().dispatch([processesToClose = WTF::move(processesToClose), pageProxyID = identifier()] {
+    RunLoop::currentSingleton().dispatch([processesToClose = WTF::move(processesToClose), pageProxyID = identifier(), aggregator = CallbackAggregator::create(WTF::move(completionHandler))] {
         for (auto [process, pageID, scope] : processesToClose) {
-            protect(process)->sendPageCloseMessage(std::nullopt, pageID, [scope = WTF::move(scope), pageProxyID, weakProcess = WeakPtr { process }] {
+            protect(process)->sendPageCloseMessage(std::nullopt, pageID, [scope = WTF::move(scope), pageProxyID, weakProcess = WeakPtr { process }, aggregator] {
                 if (RefPtr process = weakProcess.get())
                     process->removePagePendingClose(pageProxyID);
             });

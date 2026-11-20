@@ -514,6 +514,18 @@ webkit_web_view_get_website_data_manager             (WebKitWebView             
 WEBKIT_API WebKitWebContext *
 webkit_web_view_get_context                          (WebKitWebView             *web_view);
 
+// Brimp local embedding SPI: close immediately without beforeunload prompts.
+WEBKIT_API void
+webkit_web_view_close                                (WebKitWebView             *web_view,
+                                                      GCancellable              *cancellable,
+                                                      GAsyncReadyCallback        callback,
+                                                      gpointer                   user_data);
+
+WEBKIT_API gboolean
+webkit_web_view_close_finish                         (WebKitWebView             *web_view,
+                                                      GAsyncResult              *result,
+                                                      GError                   **error);
+
 WEBKIT_API void
 webkit_web_view_try_close                            (WebKitWebView             *web_view);
 

@@ -43,6 +43,7 @@
 
 namespace WebCore {
 
+#if !PLATFORM(GTK)
 static String defaultCookieJarPath()
 {
     static constexpr auto defaultFileName = "cookie.jar.db"_s;
@@ -57,6 +58,8 @@ static String defaultCookieJarPath()
     return defaultFileName;
 #endif
 }
+
+#endif
 
 static String alternativeServicesStorageFile(const String& alternativeServicesDirectory)
 {
@@ -90,7 +93,12 @@ static std::pair<String, bool> cookiesForSession(const NetworkStorageSession& se
 NetworkStorageSession::NetworkStorageSession(PAL::SessionID sessionID, const String& alternativeServicesDirectory)
     : m_sessionID(sessionID)
     // :memory: creates in-memory database, see https://www.sqlite.org/inmemorydb.html
+#if PLATFORM(GTK)
+    // GTK enables persistence explicitly on the owning network session.
+    , m_cookieDatabase(makeUniqueRef<CookieJarDB>(":memory:"_s))
+#else
     , m_cookieDatabase(makeUniqueRef<CookieJarDB>(sessionID.isEphemeral() ? ":memory:"_s : defaultCookieJarPath()))
+#endif
 {
     if (!alternativeServicesDirectory.isEmpty()) {
         FileSystem::makeAllDirectories(alternativeServicesDirectory);
@@ -222,10 +230,10 @@ void NetworkStorageSession::getHostnamesWithCookies(HashSet<String>& hostnames)
     hostnames = cookieDatabase().allDomains();
 }
 
-Vector<Cookie> NetworkStorageSession::getCookies(const URL&)
+Vector<Cookie> NetworkStorageSession::getCookies(const URL& url)
 {
-    // FIXME: Implement for WebKit to use.
-    return { };
+    auto secure = url.protocolIs("https"_s) ? std::nullopt : std::optional<bool>(false);
+    return cookieDatabase().searchCookies(url, url, std::nullopt, secure, std::nullopt).value_or(Vector<Cookie> { });
 }
 
 void NetworkStorageSession::hasCookies(const RegistrableDomain&, CompletionHandler<void(bool)>&& completionHandler) const
@@ -253,6 +261,19 @@ std::pair<String, bool> NetworkStorageSession::cookieRequestHeaderFieldValue(con
 {
     return cookieRequestHeaderFieldValue(headerFieldProxy.firstParty, headerFieldProxy.sameSiteInfo, headerFieldProxy.url, headerFieldProxy.frameID, headerFieldProxy.pageID, headerFieldProxy.includeSecureCookies, ApplyTrackingPrevention::Yes, ShouldRelaxThirdPartyCookieBlocking::No, IsKnownCrossSiteTracker::No);
 }
+
+#if HAVE(COOKIE_CHANGE_LISTENER_API)
+bool NetworkStorageSession::startListeningForCookieChangeNotifications(CookieChangeObserver&, const URL&, const URL&, FrameIdentifier, PageIdentifier, ShouldRelaxThirdPartyCookieBlocking, IsKnownCrossSiteTracker)
+{
+    // The curl cookie store cannot deliver change notifications. Report an
+    // unsupported subscription instead of registering an observer never called.
+    return false;
+}
+
+void NetworkStorageSession::stopListeningForCookieChangeNotifications(CookieChangeObserver&, const HashSet<String>&)
+{
+}
+#endif
 
 void NetworkStorageSession::setProxySettings(const CurlProxySettings& proxySettings)
 {

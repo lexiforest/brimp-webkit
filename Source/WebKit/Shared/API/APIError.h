@@ -81,7 +81,7 @@ public:
     };
     static const WTF::String& webKitPluginErrorDomain();
 
-#if USE(SOUP)
+#if USE(SOUP) || PLATFORM(GTK)
     enum Download {
         Transport = 499,
         CancelledByUser = 400,

@@ -56,12 +56,24 @@ public:
         virtual void didFail(CurlStreamID, CURLcode, CertificateInfo&&) = 0;
     };
 
-    static std::unique_ptr<CurlStream> create(CurlStreamScheduler& scheduler, CurlStreamID streamID, URL&& url, ServerTrustEvaluation serverTrustEvaluation, LocalhostAlias localhostAlias)
+    static std::unique_ptr<CurlStream> create(CurlStreamScheduler& scheduler, CurlStreamID streamID, URL&& url, ServerTrustEvaluation serverTrustEvaluation, LocalhostAlias localhostAlias
+#if PLATFORM(GTK)
+    , GRefPtr<GProxyResolver> proxyResolver
+#endif
+)
     {
-        return makeUnique<CurlStream>(scheduler, streamID, WTF::move(url), serverTrustEvaluation, localhostAlias);
+        return makeUnique<CurlStream>(scheduler, streamID, WTF::move(url), serverTrustEvaluation, localhostAlias
+#if PLATFORM(GTK)
+            , WTF::move(proxyResolver)
+#endif
+        );
     }
 
-    CurlStream(CurlStreamScheduler&, CurlStreamID, URL&&, ServerTrustEvaluation, LocalhostAlias);
+    CurlStream(CurlStreamScheduler&, CurlStreamID, URL&&, ServerTrustEvaluation, LocalhostAlias
+#if PLATFORM(GTK)
+        , GRefPtr<GProxyResolver>
+#endif
+    );
     virtual ~CurlStream();
 
     void send(UniqueArray<uint8_t>&&, size_t);

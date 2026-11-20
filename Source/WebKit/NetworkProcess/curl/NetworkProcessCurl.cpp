@@ -28,23 +28,49 @@
 
 #include "NetworkCache.h"
 #include "NetworkProcessCreationParameters.h"
+#if PLATFORM(GTK)
+#include "NetworkProcessProxyMessages.h"
+#endif
 #include "NetworkSessionCurl.h"
 #include <WebCore/CurlContext.h>
 #include <WebCore/NetworkStorageSession.h>
 #include <WebCore/NotImplemented.h>
 #include <wtf/CallbackAggregator.h>
+#include <wtf/Language.h>
+#include <WebCore/DNS.h>
 
 namespace WebKit {
 
 using namespace WebCore;
 
-void NetworkProcess::platformInitializeNetworkProcess(const NetworkProcessCreationParameters&)
+void NetworkProcess::platformInitializeNetworkProcess(const NetworkProcessCreationParameters& parameters)
 {
+#if PLATFORM(GTK)
+    if (!parameters.languages.isEmpty())
+        userPreferredLanguagesChanged(parameters.languages);
+#if ENABLE(PERIODIC_MEMORY_MONITOR)
+    if (!parameters.shouldSuppressMemoryPressureHandler && parameters.memoryPressureHandlerConfiguration) {
+        auto& handler = MemoryPressureHandler::singleton();
+        handler.setConfiguration(*parameters.memoryPressureHandlerConfiguration);
+        handler.setShouldUsePeriodicMemoryMonitor(true);
+        handler.setMemoryKillCallback([this] {
+            parentProcessConnection()->send(Messages::NetworkProcessProxy::DidExceedMemoryLimit(), 0);
+        });
+    }
+#endif
+#else
+    UNUSED_PARAM(parameters);
+#endif
 }
 
-void NetworkProcess::allowSpecificHTTPSCertificateForHost(PAL::SessionID, const CertificateInfo& certificateInfo, const String& host)
+void NetworkProcess::allowSpecificHTTPSCertificateForHost(PAL::SessionID sessionID, const CertificateInfo& certificateInfo, const String& host)
 {
+#if PLATFORM(GTK)
+    if (auto* session = networkSession(sessionID))
+        static_cast<NetworkSessionCurl&>(*session).allowSpecificHTTPSCertificateForHost(certificateInfo, host);
+#else
     notImplemented();
+#endif
 }
 
 void NetworkProcess::clearDiskCache(WallTime modifiedSince, CompletionHandler<void()>&& completionHandler)
@@ -61,6 +87,7 @@ void NetworkProcess::platformTerminate()
     notImplemented();
 }
 
+#if !PLATFORM(GTK)
 void NetworkProcess::setNetworkProxySettings(PAL::SessionID sessionID, WebCore::CurlProxySettings&& settings)
 {
     if (auto* networkStorageSession = storageSession(sessionID))
@@ -68,5 +95,36 @@ void NetworkProcess::setNetworkProxySettings(PAL::SessionID sessionID, WebCore::
     else
         ASSERT_NOT_REACHED();
 }
+#endif
+
+#if PLATFORM(GTK)
+void NetworkProcess::setNetworkProxySettings(PAL::SessionID id, SoupNetworkProxySettings&& settings)
+{
+    if (auto* session = networkSession(id))
+        static_cast<NetworkSessionCurl&>(*session).setProxySettings(settings);
+}
+
+void NetworkProcess::setIgnoreTLSErrors(PAL::SessionID id, bool value)
+{
+    if (auto* session = networkSession(id))
+        static_cast<NetworkSessionCurl&>(*session).setIgnoreTLSErrors(value);
+}
+
+void NetworkProcess::setPersistentCredentialStorageEnabled(PAL::SessionID id, bool enabled)
+{
+    if (auto* session = networkSession(id))
+        static_cast<NetworkSessionCurl&>(*session).setPersistentCredentialStorageEnabled(enabled);
+}
+
+void NetworkProcess::userPreferredLanguagesChanged(const Vector<String>& languages)
+{
+    overrideUserPreferredLanguages(languages);
+}
+
+void NetworkProcess::prefetchDNS(const String& hostname)
+{
+    WebCore::prefetchDNS(hostname);
+}
+#endif
 
 } // namespace WebKit

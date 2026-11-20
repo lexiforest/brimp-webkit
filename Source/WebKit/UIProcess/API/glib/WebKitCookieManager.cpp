@@ -528,7 +528,7 @@ void webkit_cookie_manager_delete_all_cookies(WebKitCookieManager* manager)
 /**
  * webkit_cookie_manager_replace_cookies:
  * @cookie_manager: a #WebKitCookieManager
- * @cookies: (element-type SoupCookie) (transfer none): a #GList of #SoupCookie to be added
+ * @cookies: (element-type SoupCookie) (transfer none) (nullable): cookies to replace the store with; %NULL clears the store
  * @cancellable: (nullable): a #GCancellable or %NULL to ignore
  * @callback: (scope async): (closure user_data): a #GAsyncReadyCallback to call when the request is satisfied
  * @user_data: the data to pass to callback function
@@ -543,7 +543,6 @@ void webkit_cookie_manager_delete_all_cookies(WebKitCookieManager* manager)
 void webkit_cookie_manager_replace_cookies(WebKitCookieManager* manager, GList* cookies, GCancellable* cancellable, GAsyncReadyCallback callback, gpointer userData)
 {
     g_return_if_fail(WEBKIT_IS_COOKIE_MANAGER(manager));
-    g_return_if_fail(cookies);
 
     Vector<WebCore::Cookie> webCookies;
     for (GList* it = cookies; it; it = g_list_next(it))
