@@ -1,13 +1,13 @@
-name: JavaScriptCore release
+name: WebKit and JavaScriptCore release
 
 on:
   push:
     tags:
-      - "jsc-v*"
+      - "webkit-v-*"
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing jsc-v* tag to build and release
+        description: Existing webkit-v-* tag to build and release
         required: true
         type: string
 
@@ -18,9 +18,46 @@ env:
   RELEASE_TAG: >-
     ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
 
+concurrency:
+  group: webkit-release-${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
+  validate:
+    name: Resolve release tag
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.revision.outputs.commit }}
+    steps:
+      - name: Validate tag name
+        shell: bash
+        run: |
+          [[ "$RELEASE_TAG" =~ ^webkit-v-[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+            echo 'Expected an existing webkit-v-* tag' >&2
+            exit 1
+          }
+      - name: Check out release tag
+        uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - name: Record release commit
+        id: revision
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Test release packaging
+        run: |
+          python3 -m pip install pytest
+          python3 -m pytest Tools/Scripts/test_package_webkit_sdk.py -q
+
   build:
-    name: Build ${{ matrix.name }}
+    name: JSC ${{ matrix.name }}
+    needs: validate
+    env:
+      RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
     strategy:
       fail-fast: false
       matrix:
@@ -43,7 +80,7 @@ jobs:
             arch: x64
             build_dir: WebKitBuild/Release
           - name: macos-arm64
-            runner: macos-26
+            runner: xcode-27
             os: macos
             arch: arm64
             build_dir: WebKitBuild/JSCOnly/Release
@@ -54,7 +91,8 @@ jobs:
       - name: Check out release tag
         uses: actions/checkout@v6
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
 
       - name: Build on manylinux 2.28
         if: matrix.os == 'linux'
@@ -70,7 +108,7 @@ jobs:
       - name: Install macOS dependencies
         if: matrix.os == 'macos'
         run: |
-          sudo xcode-select --switch /Applications/Xcode_26.6.app
+          sudo xcode-select --switch /Applications/Xcode_27.2.app
           xcodebuild -version
           brew install icu4c ninja
 
@@ -186,7 +224,7 @@ jobs:
             --output-dir "$stage" \
             --platform "${{ matrix.os }}" \
             --tag "$RELEASE_TAG" \
-            --commit "$GITHUB_SHA" \
+            --commit "$RELEASE_COMMIT" \
             --target "${{ matrix.name }}" \
             "${runtime_args[@]}"
           if [[ "${{ matrix.os }}" == "macos" ]]; then
@@ -228,7 +266,7 @@ jobs:
             --symbols-output-dir $symbolsStage `
             --platform windows `
             --tag $env:RELEASE_TAG `
-            --commit $env:GITHUB_SHA `
+            --commit $env:RELEASE_COMMIT `
             --target "${{ matrix.name }}"
           & "$stage\bin\jsc.exe" -e 'print("JSC smoke test passed")'
 
@@ -269,9 +307,87 @@ jobs:
           path: JavaScriptCore-${{ env.RELEASE_TAG }}-${{ matrix.name }}*.tar.gz
           if-no-files-found: error
 
+  webkit:
+    name: WebKit macOS arm64
+    needs: validate
+    runs-on: xcode-27
+    timeout-minutes: 360
+    env:
+      RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+    steps:
+      - name: Check out release sources
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+          # Omit the large browser test-data trees from this binary build.
+          sparse-checkout: |
+            .github
+            Configurations
+            Source
+            Tools
+            WebKit.xcworkspace
+            WebKitLibraries
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Select Xcode and install Metal tools
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.2.app
+          xcodebuild -version
+          xcodebuild -downloadComponent MetalToolchain
+          df -h .
+      - name: Build frameworks and browser subprocesses
+        shell: bash
+        run: |
+          set -o pipefail
+          # Limit parallel compilation on the standard arm64 runner.
+          # Exclude debug symbols and unrelated browser test tools.
+          Tools/Scripts/build-webkit --release \
+            '--only=Everything up to WebKit' -jobs 2 \
+            DEBUG_INFORMATION_FORMAT= GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
+            MACOSX_DEPLOYMENT_TARGET=27.0 \
+            COMPILATION_CACHE_ENABLE_CACHING=NO \
+            2>&1 | tee "$RUNNER_TEMP/webkit-build.log"
+      - name: Package WebKit SDK
+        shell: bash
+        run: |
+          package="WebKit-$RELEASE_TAG-macos-arm64"
+          python3 Tools/Scripts/package-webkit-sdk.py \
+            --build-dir WebKitBuild/Release \
+            --output-dir "$RUNNER_TEMP/$package" \
+            --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT"
+          tar -C "$RUNNER_TEMP" -czf "$package.tar.gz" "$package"
+      - name: Smoke-test extracted SDK without build products
+        shell: bash
+        run: |
+          package="WebKit-$RELEASE_TAG-macos-arm64"
+          extracted="$RUNNER_TEMP/extracted-sdk"
+          mkdir -p "$extracted"
+          tar -xzf "$package.tar.gz" -C "$extracted"
+          products="$GITHUB_WORKSPACE/WebKitBuild/Release"
+          mv "$products" "$products.hidden"
+          trap 'mv "$products.hidden" "$products"' EXIT
+          python3 Tools/Scripts/test-webkit-sdk.py "$extracted/$package"
+      - name: Upload WebKit archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: WebKit-macos-arm64
+          path: WebKit-${{ env.RELEASE_TAG }}-macos-arm64.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+      - name: Upload WebKit build log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: WebKit-macos-arm64-log
+          path: ${{ runner.temp }}/webkit-build.log
+          if-no-files-found: ignore
+
   release:
     name: Publish GitHub release
-    needs: build
+    needs: [validate, build, webkit]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -285,7 +401,9 @@ jobs:
 
       - name: Create checksums
         working-directory: dist
-        run: sha256sum JavaScriptCore-* > SHA256SUMS
+        run: |
+          test "$(find . -maxdepth 1 -name '*.tar.gz' | wc -l)" -eq 6
+          sha256sum ./*.tar.gz > SHA256SUMS
 
       - name: Create release and upload assets
         env:
@@ -293,7 +411,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           gh release create "$RELEASE_TAG" \
-            dist/JavaScriptCore-* \
+            dist/*.tar.gz \
             dist/SHA256SUMS \
             --verify-tag \
             --generate-notes
