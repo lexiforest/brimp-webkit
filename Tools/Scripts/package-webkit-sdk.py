@@ -114,7 +114,7 @@ def package(root, build, output, tag, commit, minimum_macos):
     copy_products(build, output / "lib")
     copy_licenses(root, output)
     (output / "BUILD-INFO.txt").write_text(
-        f"tag={tag}\ncommit={commit}\ntarget=macos-arm64\nminimum_macos={minimum_macos}\n"
+        f"tag={tag}\ncommit={commit}\ntarget=arm64-macos\nminimum_macos={minimum_macos}\n"
     )
     (output / "README.md").write_text("""# WebKit macOS arm64 SDK
 
@@ -138,7 +138,7 @@ in BUILD-INFO.txt. License texts are under share/licenses/.
         "format": 1,
         "tag": tag,
         "commit": commit,
-        "target": "macos-arm64",
+        "target": "arm64-macos",
         "minimum_macos": minimum_macos,
         "files": file_records(output),
     }
@@ -192,7 +192,8 @@ def package_linux(root, installed, output, curl_build, curl_source, tag, commit)
     metadata = {
         "tag": tag,
         "commit": commit,
-        "target": "linux-x64-ubuntu-24.04",
+        "target": "x86_64-linux-gnu",
+        "build_os": "ubuntu-24.04",
         "install_prefix": str(installed),
         "runtime_layout_version": 1,
         "curl_impersonate_commit": curl_commit,

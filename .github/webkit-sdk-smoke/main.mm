@@ -12,13 +12,15 @@ static void fail(NSString *message)
     exit(1);
 }
 
-@interface Consumer : NSObject <WKNavigationDelegate>
+@interface Consumer : NSObject <WKNavigationDelegate, WKUIDelegate>
 @property(nonatomic, strong) WKWebView *view;
 @property(nonatomic, strong) NSWindow *window;
 @property(nonatomic, strong) _WKAutomationSession *automation;
 @property(nonatomic, copy) NSString *handle;
 @property(nonatomic) BOOL automationReady;
 @property(nonatomic) BOOL documentReady;
+@property(nonatomic) BOOL inputStarted;
+@property(nonatomic) BOOL inputReady;
 @end
 
 @implementation Consumer
@@ -26,10 +28,23 @@ static void fail(NSString *message)
 {
     if (!_automationReady || !_documentReady)
         return;
+    if (!_inputStarted) {
+        _inputStarted = YES;
+        [_view evaluateJavaScript:@"window.sdkInputEvents = []; const button = document.createElement('button'); button.style = 'position:fixed;left:20px;top:20px;width:100px;height:40px'; button.textContent = 'Click'; for (const type of ['mousedown', 'mouseup', 'click']) button.addEventListener(type, event => sdkInputEvents.push(event.type + ':' + event.isTrusted)); document.body.appendChild(button); void 0;" completionHandler:^(id value, NSError *error) {
+            if (error)
+                fail(error.description);
+            NSDictionary *command = @{ @"id": @2, @"method": @"Automation.performMouseInteraction", @"params": @{ @"handle": self.handle, @"position": @{ @"x": @70, @"y": @40 }, @"button": @"Left", @"interaction": @"SingleClick", @"modifiers": @[] } };
+            NSData *data = [NSJSONSerialization dataWithJSONObject:command options:0 error:nil];
+            [self.automation _dispatchMessageFromRemote:[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]];
+        }];
+        return;
+    }
+    if (!_inputReady)
+        return;
     [_view _close];
     [_automation _setMessageToFrontendHandler:nil];
     [_automation terminate];
-    puts("WebKit SDK: packaged framework, local Automation, HTTP navigation and JavaScript passed");
+    puts("WebKit SDK: packaged framework, local Automation, HTTP navigation, JavaScript and trusted mouse input passed");
     exit(0);
 }
 
@@ -45,6 +60,7 @@ static void fail(NSString *message)
     configuration._controlledByAutomation = YES;
     _view = [[WKWebView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600) configuration:configuration];
     _view.navigationDelegate = self;
+    _view.UIDelegate = self;
     _window = [[NSWindow alloc] initWithContentRect:_view.frame styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
     _window.contentView = _view;
     _handle = [_automation _registerWebView:_view];
@@ -52,10 +68,19 @@ static void fail(NSString *message)
     [_automation _setMessageToFrontendHandler:^(NSString *serialized) {
         Consumer *consumer = weakSelf;
         NSDictionary *message = [NSJSONSerialization JSONObjectWithData:[serialized dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
-        if (![message[@"id"] isEqual:@1])
+        if (![message[@"id"] isEqual:@1] && ![message[@"id"] isEqual:@2])
             return;
         if (message[@"error"])
             fail([message description]);
+        if ([message[@"id"] isEqual:@2]) {
+            [consumer.view evaluateJavaScript:@"sdkInputEvents.join(',')" completionHandler:^(id value, NSError *error) {
+                if (error || ![value isEqual:@"mousedown:true,mouseup:true,click:true"])
+                    fail([@"Trusted click failed: " stringByAppendingString:error.description ?: [value description]]);
+                consumer.inputReady = YES;
+                [consumer finishIfReady];
+            }];
+            return;
+        }
         for (NSDictionary *context in message[@"result"][@"contexts"]) {
             if ([context[@"handle"] isEqual:consumer.handle])
                 consumer.automationReady = YES;
@@ -66,6 +91,11 @@ static void fail(NSString *message)
     }];
     [_automation _dispatchMessageFromRemote:@"{\"id\":1,\"method\":\"Automation.getBrowsingContexts\",\"params\":{}}"];
     [_view loadRequest:[NSURLRequest requestWithURL:url]];
+}
+
+- (void)_webView:(WKWebView *)view getWindowFrameWithCompletionHandler:(void (^)(CGRect))completionHandler
+{
+    completionHandler(view.window.frame);
 }
 
 - (void)webView:(WKWebView *)view didFinishNavigation:(WKNavigation *)navigation

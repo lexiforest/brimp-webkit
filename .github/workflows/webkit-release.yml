@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       commit: ${{ steps.revision.outputs.commit }}
+      version: ${{ steps.revision.outputs.version }}
     steps:
       - name: Validate tag name
         shell: bash
@@ -43,7 +44,9 @@ jobs:
           persist-credentials: false
       - name: Record release commit
         id: revision
-        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=${RELEASE_TAG#webkit-v-}" >> "$GITHUB_OUTPUT"
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -58,28 +61,29 @@ jobs:
     needs: validate
     env:
       RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: linux-x64
+          - name: x86_64-linux-gnu
             runner: ubuntu-24.04
             os: linux
             arch: x64
             manylinux_image: quay.io/pypa/manylinux_2_28_x86_64
             build_dir: WebKitBuild/JSCOnly/Release
-          - name: linux-arm64
+          - name: aarch64-linux-gnu
             runner: ubuntu-24.04-arm
             os: linux
             arch: arm64
             manylinux_image: quay.io/pypa/manylinux_2_28_aarch64
             build_dir: WebKitBuild/JSCOnly/Release
-          - name: windows-x64
+          - name: x86_64-win32
             runner: windows-2022
             os: windows
             arch: x64
             build_dir: WebKitBuild/Release
-          - name: macos-arm64
+          - name: arm64-macos
             runner: xcode-27
             os: macos
             arch: arm64
@@ -208,7 +212,7 @@ jobs:
         shell: bash
         run: |
           build="${{ matrix.build_dir }}"
-          package="JavaScriptCore-$RELEASE_TAG-${{ matrix.name }}"
+          package="javascriptcore-v$RELEASE_VERSION.${{ matrix.name }}"
           stage="$RUNNER_TEMP/$package"
           runtime_args=()
           if [[ "${{ matrix.os }}" == "linux" ]]; then
@@ -256,9 +260,9 @@ jobs:
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $true
           $build = "${{ matrix.build_dir }}"
-          $package = "JavaScriptCore-$env:RELEASE_TAG-${{ matrix.name }}"
+          $package = "javascriptcore-v$env:RELEASE_VERSION.${{ matrix.name }}"
           $stage = Join-Path $env:RUNNER_TEMP $package
-          $symbolsPackage = "$package-symbols"
+          $symbolsPackage = "$package.symbols"
           $symbolsStage = Join-Path $env:RUNNER_TEMP $symbolsPackage
           python Tools/Scripts/package-jsc-sdk.py `
             --build-dir $build `
@@ -303,8 +307,8 @@ jobs:
       - name: Upload packaged build
         uses: actions/upload-artifact@v7
         with:
-          name: JavaScriptCore-${{ matrix.name }}
-          path: JavaScriptCore-${{ env.RELEASE_TAG }}-${{ matrix.name }}*.tar.gz
+          name: javascriptcore-${{ matrix.name }}
+          path: javascriptcore-v${{ env.RELEASE_VERSION }}.${{ matrix.name }}*.tar.gz
           if-no-files-found: error
 
   webkit:
@@ -314,6 +318,7 @@ jobs:
     timeout-minutes: 360
     env:
       RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     steps:
       - name: Check out release sources
         uses: actions/checkout@v6
@@ -353,7 +358,7 @@ jobs:
       - name: Package WebKit SDK
         shell: bash
         run: |
-          package="WebKit-$RELEASE_TAG-macos-arm64"
+          package="webkit-v$RELEASE_VERSION.arm64-macos"
           python3 Tools/Scripts/package-webkit-sdk.py \
             --build-dir WebKitBuild/Release \
             --output-dir "$RUNNER_TEMP/$package" \
@@ -362,7 +367,7 @@ jobs:
       - name: Smoke-test extracted SDK without build products
         shell: bash
         run: |
-          package="WebKit-$RELEASE_TAG-macos-arm64"
+          package="webkit-v$RELEASE_VERSION.arm64-macos"
           extracted="$RUNNER_TEMP/extracted-sdk"
           mkdir -p "$extracted"
           tar -xzf "$package.tar.gz" -C "$extracted"
@@ -373,15 +378,15 @@ jobs:
       - name: Upload WebKit archive
         uses: actions/upload-artifact@v7
         with:
-          name: WebKit-macos-arm64
-          path: WebKit-${{ env.RELEASE_TAG }}-macos-arm64.tar.gz
+          name: webkit-arm64-macos
+          path: webkit-v${{ env.RELEASE_VERSION }}.arm64-macos.tar.gz
           if-no-files-found: error
           compression-level: 0
       - name: Upload WebKit build log
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: WebKit-macos-arm64-log
+          name: webkit-arm64-macos-log
           path: ${{ runner.temp }}/webkit-build.log
           if-no-files-found: ignore
 
@@ -392,6 +397,7 @@ jobs:
     timeout-minutes: 360
     env:
       RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
       BRIMP_BUILD_JOBS: "4"
       CCACHE_DISABLE: "1"
     steps:
@@ -443,7 +449,7 @@ jobs:
       - name: Package Linux SDK
         shell: bash
         run: |
-          package="WebKit-$RELEASE_TAG-linux-x64-ubuntu-24.04"
+          package="webkit-v$RELEASE_VERSION.x86_64-linux-gnu"
           python3 Tools/Scripts/package-webkit-sdk.py \
             --platform linux --build-dir /opt/brimp/sdk/webkit-curl \
             --output-dir "$RUNNER_TEMP/$package" \
@@ -455,7 +461,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          package="WebKit-$RELEASE_TAG-linux-x64-ubuntu-24.04"
+          package="webkit-v$RELEASE_VERSION.x86_64-linux-gnu"
           sdk=/opt/brimp/sdk/webkit-curl
           products=/opt/brimp/build/webkit-curl
           mv "$sdk" "$sdk.hidden"
@@ -472,15 +478,15 @@ jobs:
       - name: Upload Linux WebKit archive
         uses: actions/upload-artifact@v7
         with:
-          name: WebKit-linux-x64
-          path: WebKit-${{ env.RELEASE_TAG }}-linux-x64-ubuntu-24.04.tar.gz
+          name: webkit-x86_64-linux-gnu
+          path: webkit-v${{ env.RELEASE_VERSION }}.x86_64-linux-gnu.tar.gz
           if-no-files-found: error
           compression-level: 0
       - name: Upload Linux build and test logs
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: WebKit-linux-x64-logs
+          name: webkit-x86_64-linux-gnu-logs
           path: |
             ${{ runner.temp }}/webkit-linux-build.log
             ${{ runner.temp }}/webkit-linux-tests.log

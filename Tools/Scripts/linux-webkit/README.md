@@ -84,7 +84,10 @@ passed all 15 tests in 15.20 seconds. Its TLS ClientHello and HTTP/2 settings
 match the pinned curl-impersonate CLI's `safari270` profile. The installed WebKit
 library has no dynamic dependency on libcurl, libssl or libcrypto, and does not
 export the checked curl/BoringSSL entry points. The SDK requires Ubuntu system dependencies. Release builds now use Ubuntu 24.04
-and Clang 18 so downstream packages can target manylinux 2.39. Runtime layout
+and Clang 18 so downstream packages can target manylinux 2.39. Release archive
+names follow curl-impersonate: `webkit-v<VERSION>.x86_64-linux-gnu.tar.gz`.
+The SDK manifest records `target=x86_64-linux-gnu` and `build_os=ubuntu-24.04`;
+the generic filename does not change its dependency requirements. Runtime layout
 version 1 supports relocation: set WEBKIT_EXEC_PATH and WEBKIT_INJECTED_BUNDLE_PATH
 to the relocated subprocess/bundle directories and add the runtime root read-only
 to the WebKit context sandbox. The release workflow hides the original SDK/build
