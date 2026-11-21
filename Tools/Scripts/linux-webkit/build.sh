@@ -27,6 +27,8 @@ cmake --build "$work/build/curl" --target install-all --parallel 4
 # WebKit's SSL-context callback must use the exact TLS headers behind curl.
 cp -a "$work/build/curl/deps/src/boringssl/include/openssl" "$curl_sdk/include/"
 
+# Pin the production C++ implementation; host Swift auto-detection must not
+# enable prototype features or add a Swift runtime dependency to the SDK.
 cmake -S "$webkit_source" -B "$work/build/webkit-curl" -G Ninja \
     -DPORT=GTK -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
@@ -34,6 +36,7 @@ cmake -S "$webkit_source" -B "$work/build/webkit-curl" -G Ninja \
     -DTRY_USE_LD_LLD=ON -DUSE_LD_LLD=ON -DCURL_IMPERSONATE_ROOT="$curl_sdk" \
     -DCMAKE_INSTALL_PREFIX="$work/sdk/webkit-curl" \
     -DENABLE_DOCUMENTATION=OFF -DENABLE_INTROSPECTION=OFF \
+    -DENABLE_SWIFT_DEMO_URI_SCHEME=OFF -DENABLE_BACK_FORWARD_LIST_SWIFT=OFF \
     -DENABLE_API_TESTS=OFF -DENABLE_LAYOUT_TESTS=OFF -DENABLE_MINIBROWSER=ON \
     -DENABLE_VIDEO=OFF -DENABLE_WEB_AUDIO=OFF -DUSE_GSTREAMER=OFF \
     -DENABLE_SPEECH_SYNTHESIS=OFF -DENABLE_GAMEPAD=OFF \

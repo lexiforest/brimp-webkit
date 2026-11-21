@@ -11,7 +11,7 @@ first), then the tools used by this recipe:
 
 ```sh
 sudo apt-get build-dep webkit2gtk
-sudo apt-get install clang-21 lld-21 ccache cmake ninja-build unifdef nasm \
+sudo apt-get install clang-18 lld-18 ccache cmake ninja-build unifdef nasm \
     xvfb xauth dbus-x11 python3-pytest python3-websockets python3-h2 curl pkg-config
 bash Tools/Scripts/linux-webkit/build.sh /path/to/WebKit /path/to/build-workspace
 ```
@@ -27,7 +27,11 @@ transport uses curl. WebCrypto retains GTK's GCrypt implementation.
 
 The initial build disables media, speech, gamepads, documentation and
 introspection to focus on browser networking. It preserves the normal browser
-process architecture. `BRIMP_BUILD_JOBS` controls parallel compilation.
+process architecture. The Swift demo URI scheme and prototype Swift
+back/forward-list implementation are explicitly disabled; navigation history uses
+the C++ implementation. Installing Swift on a build host must not change the
+release feature set or introduce Swift runtime dependencies.
+`BRIMP_BUILD_JOBS` controls parallel compilation.
 
 The port starts from the Brimp WebKit fork at `902c0df41fef`, based on
 `safari-7625.2.8-branch`. Linux build fixes cover the built-in JavaScript
