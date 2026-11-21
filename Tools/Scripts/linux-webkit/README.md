@@ -60,6 +60,23 @@ bash Tools/Scripts/linux-webkit/test.sh /path/to/build-workspace/sdk/webkit-curl
 The test runner compiles the embedding consumer, verifies the loaded WebKit
 library's location and starts pytest under D-Bus and Xvfb. Additional arguments
 are passed to pytest. The browser sandbox is not disabled by the runner.
+A Bubblewrap preflight reports host sandbox restrictions before running the tests.
+
+Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor. On hosts
+where Bubblewrap fails with `setting up uid map: Permission denied`, enable the
+distribution's scoped Bubblewrap profile:
+
+```sh
+sudo apt-get install apparmor apparmor-profiles
+sudo apparmor_parser -r /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+bwrap --unshare-user --unshare-pid --ro-bind / / --proc /proc true
+```
+
+Run the final command as the normal test user. The release workflow loads this
+profile on its disposable runner and verifies sandbox startup before compiling.
+This retains WebKit's sandbox and the system-wide user-namespace restriction.
+The profile is loaded for the current boot; persistent workstation configuration
+is managed by the system administrator. See [Ubuntu's AppArmor explanation](https://discourse.ubuntu.com/t/understanding-apparmor-user-namespace-restriction/58007).
 
 The validated SDK is installed at `/opt/brimp/sdk/webkit-curl` on the development
 machine, with build and test logs under `/opt/brimp/logs`. The final browser run

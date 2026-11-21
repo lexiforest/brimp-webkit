@@ -416,7 +416,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             clang-18 lld-18 ccache cmake ninja-build unifdef nasm \
             xvfb xauth dbus-x11 python3-venv \
-            curl pkg-config git ca-certificates bubblewrap xdg-dbus-proxy
+            curl pkg-config git ca-certificates bubblewrap xdg-dbus-proxy apparmor apparmor-profiles
           sudo apt-get clean
           python3 -m venv "$RUNNER_TEMP/webkit-tests"
           "$RUNNER_TEMP/webkit-tests/bin/python" -m pip install \
@@ -427,6 +427,13 @@ jobs:
           df -h /opt/brimp
           # Fail before compiling if the runner image leaves insufficient space.
           test "$(df --output=avail -B1 /opt/brimp | tail -1)" -ge 12884901888
+      - name: Enable and verify Bubblewrap sandbox
+        shell: bash
+        run: |
+          # Ubuntu 24.04 restricts unprivileged user namespaces. Use its scoped
+          # Bubblewrap policy; WebKit's process sandbox remains enabled.
+          sudo apparmor_parser -r /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
+          bwrap --unshare-user --unshare-pid --ro-bind / / --proc /proc true
       - name: Build curl-impersonate and WebKitGTK
         shell: bash
         run: |

@@ -4,6 +4,11 @@ set -euo pipefail
 sdk=$(realpath "${1:?usage: test.sh WEBKIT_INSTALL_PREFIX CURL_INSTALL_PREFIX}")
 curl_sdk=$(realpath "${2:?usage: test.sh WEBKIT_INSTALL_PREFIX CURL_INSTALL_PREFIX}")
 tests=$(cd -- "$(dirname -- "$0")" && pwd)
+# Report host sandbox restrictions once, before compiling or running browser tests.
+if ! bwrap --unshare-user --unshare-pid --ro-bind / / --proc /proc true; then
+    echo "Bubblewrap cannot create a sandbox; check the host's user-namespace/AppArmor policy (see README.md)." >&2
+    exit 1
+fi
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT
 mkdir -m 700 "$temporary/runtime"
