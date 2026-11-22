@@ -21,7 +21,7 @@ def main():
     )
     packaging = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(packaging)
-    packaging.verify_package(sdk)
+    manifest = packaging.verify_package(sdk)
     root = Path(__file__).resolve().parents[2]
     libraries = sdk / "lib"
 
@@ -44,6 +44,7 @@ def main():
                 "xcrun",
                 "clang++",
                 "-std=c++20",
+                "-mmacosx-version-min=" + manifest["minimum_macos"],
                 "-fobjc-arc",
                 "-Wno-deprecated-declarations",
                 "-F",

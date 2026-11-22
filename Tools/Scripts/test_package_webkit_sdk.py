@@ -76,7 +76,7 @@ def test_manifest_detects_corruption_missing_files_and_added_files(build, tmp_pa
     license.parent.mkdir(parents=True)
     license.write_text("license text")
     stage = tmp_path / "sdk"
-    packaging.package(root, build, stage, "webkit-v-test", "a" * 40, "27.0")
+    packaging.package(root, build, stage, "webkit-v-test", "a" * 40, "15.0")
     manifest = packaging.verify_package(stage)
     assert manifest["commit"] == "a" * 40
     assert (
@@ -110,3 +110,15 @@ def test_jsc_public_headers_use_cmake_staging_directory(tmp_path):
     output = tmp_path / "sdk"
     jsc.copy_headers(build, output)
     assert (output / "include/JavaScriptCore/JSBase.h").read_text() == "JSBase.h"
+
+
+@pytest.mark.parametrize("minimum", ["15.0", "15.0.0", "27.0"])
+def test_sdk_rejects_subprocess_requiring_newer_macos(tmp_path, monkeypatch, minimum):
+    binary = tmp_path / "WebContent"
+    binary.write_bytes(b"\xcf\xfa\xed\xfe" + b"test Mach-O")
+    monkeypatch.setattr(packaging.subprocess, "check_output", lambda *args, **kwargs: f"platform MACOS\nminos {minimum}\nsdk 27.2\n")
+    if minimum in ("15.0", "15.0.0"):
+        packaging.verify_macos_deployment_target(tmp_path, "15.0")
+    else:
+        with pytest.raises(RuntimeError, match="exceeds macOS 15.0"):
+            packaging.verify_macos_deployment_target(tmp_path, "15.0")

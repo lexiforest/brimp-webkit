@@ -109,9 +109,35 @@ def verify_package(root):
     return manifest
 
 
+def verify_macos_deployment_target(root, maximum):
+    """Reject any bundled Mach-O requiring a newer OS than the SDK advertises."""
+    def version(value):
+        return tuple(map(int, (value.split(".") + ["0", "0"])[:3]))
+
+    maximum_version = version(maximum)
+    for path in root.rglob("*"):
+        if path.is_symlink() or not path.is_file():
+            continue
+        with path.open("rb") as source:
+            magic = source.read(4)
+        if magic not in (b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe"):
+            continue
+        commands = subprocess.check_output(
+            ["xcrun", "vtool", "-show-build", str(path)], text=True
+        )
+        versions = [
+            line.split()[1]
+            for line in commands.splitlines()
+            if line.strip().startswith("minos ")
+        ]
+        if not versions or any(version(value) > maximum_version for value in versions):
+            raise RuntimeError(f"{path} exceeds macOS {maximum} deployment target: {versions}")
+
+
 def package(root, build, output, tag, commit, minimum_macos):
     output.mkdir(parents=True, exist_ok=False)
     copy_products(build, output / "lib")
+    verify_macos_deployment_target(output / "lib", minimum_macos)
     copy_licenses(root, output)
     (output / "BUILD-INFO.txt").write_text(
         f"tag={tag}\ncommit={commit}\ntarget=arm64-macos\nminimum_macos={minimum_macos}\n"
@@ -289,6 +315,8 @@ def main():
         for line in load_commands.splitlines()
         if line.strip().startswith("minos ")
     )
+    if minimum != "15.0":
+        parser.error(f"Expected WebKit built for macOS 15.0, got {minimum}; rebuild the SDK")
     package(
         Path(__file__).resolve().parents[2],
         build,

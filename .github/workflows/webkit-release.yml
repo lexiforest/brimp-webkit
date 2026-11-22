@@ -15,6 +15,7 @@ permissions:
   contents: read
 
 env:
+  MACOSX_DEPLOYMENT_TARGET: "15.0"
   RELEASE_TAG: >-
     ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
 
@@ -128,7 +129,7 @@ jobs:
             -DDEVELOPER_MODE=ON \
             -DDEVELOPER_MODE_FATAL_WARNINGS=OFF \
             -DENABLE_API_TESTS=OFF \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
             '-DCMAKE_BUILD_RPATH=@loader_path/../lib' \
             -DCMAKE_BUILD_WITH_INSTALL_NAME_DIR=ON \
             '-DCMAKE_INSTALL_NAME_DIR=@rpath' \
@@ -236,7 +237,7 @@ jobs:
             install_name="$(otool -D "$framework" | tail -n 1)"
             deployment_target="$(otool -l "$framework" | awk '$1 == "minos" { print $2; exit }')"
             [[ "$install_name" == @rpath/JavaScriptCore.framework/* ]]
-            [[ "$deployment_target" == 11.0 ]]
+            [[ "$deployment_target" == "$MACOSX_DEPLOYMENT_TARGET" ]]
             "$stage/bin/jsc" -e 'print("JSC smoke test passed")'
           else
             python3 Tools/Scripts/check-glibc-baseline.py \
@@ -352,7 +353,7 @@ jobs:
           Tools/Scripts/build-webkit --release \
             '--only=Everything up to WebKit' -jobs 2 \
             DEBUG_INFORMATION_FORMAT= GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
-            MACOSX_DEPLOYMENT_TARGET=27.0 \
+            MACOSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
             COMPILATION_CACHE_ENABLE_CACHING=NO \
             2>&1 | tee "$RUNNER_TEMP/webkit-build.log"
       - name: Package WebKit SDK
@@ -492,9 +493,42 @@ jobs:
             ${{ runner.temp }}/webkit-linux-tests.log
           if-no-files-found: ignore
 
+  macos15:
+    name: Verify WebKit and JSC on macOS 15
+    needs: [validate, build, webkit]
+    runs-on: macos-15
+    env:
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.commit }}
+          persist-credentials: false
+          sparse-checkout: |
+            .github
+            Tools/Scripts
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v8
+        with:
+          name: javascriptcore-arm64-macos
+          path: artifacts
+      - uses: actions/download-artifact@v8
+        with:
+          name: webkit-arm64-macos
+          path: artifacts
+      - name: Run released engine binaries on the minimum OS
+        run: |
+          mkdir -p "$RUNNER_TEMP/sdk"
+          tar -xzf "artifacts/javascriptcore-v$RELEASE_VERSION.arm64-macos.tar.gz" -C "$RUNNER_TEMP/sdk"
+          tar -xzf "artifacts/webkit-v$RELEASE_VERSION.arm64-macos.tar.gz" -C "$RUNNER_TEMP/sdk"
+          "$RUNNER_TEMP/sdk/javascriptcore-v$RELEASE_VERSION.arm64-macos/bin/jsc" -e 'if (6*7 !== 42) throw Error("JSC failed"); print("JSC macOS 15 passed")'
+          python3 Tools/Scripts/test-webkit-sdk.py "$RUNNER_TEMP/sdk/webkit-v$RELEASE_VERSION.arm64-macos"
+
   release:
     name: Publish GitHub release
-    needs: [validate, build, webkit, webkit-linux]
+    needs: [validate, build, webkit, webkit-linux, macos15]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
