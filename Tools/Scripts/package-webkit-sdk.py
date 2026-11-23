@@ -315,8 +315,8 @@ def main():
         for line in load_commands.splitlines()
         if line.strip().startswith("minos ")
     )
-    if minimum != "15.0":
-        parser.error(f"Expected WebKit built for macOS 15.0, got {minimum}; rebuild the SDK")
+    if minimum != "26.0":
+        parser.error(f"Expected WebKit built for macOS 26.0, got {minimum}; rebuild the SDK")
     package(
         Path(__file__).resolve().parents[2],
         build,

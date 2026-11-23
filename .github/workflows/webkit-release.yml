@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 env:
-  MACOSX_DEPLOYMENT_TARGET: "15.0"
+  MACOSX_DEPLOYMENT_TARGET: "26.0"
   RELEASE_TAG: >-
     ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
 
@@ -493,10 +493,10 @@ jobs:
             ${{ runner.temp }}/webkit-linux-tests.log
           if-no-files-found: ignore
 
-  macos15:
-    name: Verify WebKit and JSC on macOS 15
+  macos26:
+    name: Verify WebKit and JSC on macOS 26
     needs: [validate, build, webkit]
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     steps:
@@ -523,12 +523,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/sdk"
           tar -xzf "artifacts/javascriptcore-v$RELEASE_VERSION.arm64-macos.tar.gz" -C "$RUNNER_TEMP/sdk"
           tar -xzf "artifacts/webkit-v$RELEASE_VERSION.arm64-macos.tar.gz" -C "$RUNNER_TEMP/sdk"
-          "$RUNNER_TEMP/sdk/javascriptcore-v$RELEASE_VERSION.arm64-macos/bin/jsc" -e 'if (6*7 !== 42) throw Error("JSC failed"); print("JSC macOS 15 passed")'
+          "$RUNNER_TEMP/sdk/javascriptcore-v$RELEASE_VERSION.arm64-macos/bin/jsc" -e 'if (6*7 !== 42) throw Error("JSC failed"); print("JSC macOS 26 passed")'
           python3 Tools/Scripts/test-webkit-sdk.py "$RUNNER_TEMP/sdk/webkit-v$RELEASE_VERSION.arm64-macos"
 
   release:
     name: Publish GitHub release
-    needs: [validate, build, webkit, webkit-linux, macos15]
+    needs: [validate, build, webkit, webkit-linux, macos26]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
