@@ -344,6 +344,10 @@ jobs:
           xcodebuild -version
           xcodebuild -downloadComponent MetalToolchain
           df -h .
+      - name: Check macOS API availability
+        run: |
+          python3 -m pip install pytest
+          python3 -m pytest Tools/Scripts/test_macos_availability.py -q
       - name: Build frameworks and browser subprocesses
         shell: bash
         run: |

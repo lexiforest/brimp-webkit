@@ -1487,6 +1487,9 @@ void WebAuthenticatorCoordinatorProxy::signalUnknownCredential(const WebCore::Se
         }
         completionHandler(std::nullopt);
     }).get()];
+#else
+    // Signaling is advisory when the credential-update backend is unavailable.
+    completionHandler(std::nullopt);
 #endif
 }
 
@@ -1518,6 +1521,9 @@ void WebAuthenticatorCoordinatorProxy::signalAllAcceptedCredentials(const WebCor
         }
         completionHandler(std::nullopt);
     }).get()];
+#else
+    // Signaling is advisory when the credential-update backend is unavailable.
+    completionHandler(std::nullopt);
 #endif
 }
 
@@ -1539,6 +1545,9 @@ void WebAuthenticatorCoordinatorProxy::signalCurrentUserDetails(const WebCore::S
         }
         completionHandler(std::nullopt);
     }).get()];
+#else
+    // Signaling is advisory when the credential-update backend is unavailable.
+    completionHandler(std::nullopt);
 #endif
 }
 
