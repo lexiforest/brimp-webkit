@@ -113,6 +113,11 @@ CurlContext::CurlContext()
     if (auto value = envVar.readAs<unsigned>("WEBKIT_CURL_CONNECT_TIMEOUT"))
         m_connectTimeout = Seconds(*value);
 
+    // The embedding host selects the curl-impersonate profile for this WebKit
+    // process. Empty values keep the Safari baseline.
+    if (const char* target = envVar.read("WEBKIT_CURL_IMPERSONATE"); target && *target)
+        m_impersonationTarget = String::fromUTF8(target);
+
     long maxConnects { CurlDefaultMaxConnects };
     long maxTotalConnections { CurlDefaultMaxTotalConnections };
     long maxHostConnections { CurlDefaultMaxHostConnections };
@@ -301,7 +306,8 @@ CurlHandle::CurlHandle()
 #if USE(CURL_IMPERSONATE)
     // WebKit owns HTTP headers and cookies; impersonate the transport only.
     // Each easy handle must receive the profile, including redirects and streams.
-    RELEASE_ASSERT(curl_easy_impersonate(m_handle, "safari270", 0) == CURLE_OK);
+    auto target = CurlContext::singleton().impersonationTarget().utf8();
+    RELEASE_ASSERT(curl_easy_impersonate(m_handle, target.data(), 0) == CURLE_OK);
 #endif
     curl_easy_setopt(m_handle, CURLOPT_ERRORBUFFER, m_errorBuffer);
     curl_easy_setopt(m_handle, CURLOPT_NOSIGNAL, 1L);

@@ -21,12 +21,17 @@ if [[ $(getconf GNU_LIBC_VERSION) != "glibc 2.28" ]]; then
     exit 1
 fi
 
+dnf install -y epel-release
 dnf install -y \
+    ccache \
     cmake \
     ninja-build \
     perl \
     python3 \
     ruby
+
+ccache --zero-stats
+trap 'ccache --show-stats' EXIT
 
 mkdir -p "$dependency_root"
 curl --fail --location --retry 3 --output "$icu_archive" "$icu_url"
@@ -36,7 +41,7 @@ tar -C "$dependency_root" -xzf "$icu_archive"
 mv "$dependency_root/icu" "$icu_source"
 
 pushd "$icu_source/source"
-CC=gcc CXX=g++ CFLAGS='-O2 -fPIC' CXXFLAGS='-O2 -fPIC' \
+CC='ccache gcc' CXX='ccache g++' CFLAGS='-O2 -fPIC' CXXFLAGS='-O2 -fPIC' \
     ./configure \
         --prefix="$workspace/$icu_prefix" \
         --libdir="$workspace/$icu_prefix/lib" \

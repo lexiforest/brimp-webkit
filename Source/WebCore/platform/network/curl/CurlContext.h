@@ -126,6 +126,9 @@ public:
     // SSL
     CurlSSLHandle& sslHandle() LIFETIME_BOUND { return m_sslHandle; }
 
+    // Transport
+    const String& impersonationTarget() const LIFETIME_BOUND { return m_impersonationTarget; }
+
     // Supported features
     bool isAltSvcEnabled() const { return m_isAltSvcEnabled; }
     bool isHttp2Enabled() const { return m_isHttp2Enabled; }
@@ -157,6 +160,8 @@ private:
     Seconds m_dnsCacheTimeout { Seconds::fromMinutes(5) };
     Seconds m_connectTimeout { 30.0 };
     Seconds m_defaultTimeoutInterval { 60.0 };
+
+    String m_impersonationTarget { "safari270"_s };
 
     String m_alternativeServicesStorageFile;
 

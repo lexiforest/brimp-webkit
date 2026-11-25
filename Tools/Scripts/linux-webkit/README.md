@@ -96,6 +96,9 @@ Ubuntu 26.04 measurements above describe the earlier development build.
 
 The Linux transport reads `WEBKIT_CURL_CA_BUNDLE` at startup when a custom
 trust store is needed. TLS verification remains enabled by default.
+`WEBKIT_CURL_IMPERSONATE` selects the curl-impersonate profile for every curl
+handle in the network process; it defaults to `safari270`. The embedding host
+sets it before starting the UI process, so one WebKit process uses one profile.
 
 Current API limits: the curl cookie store uses SQLite, so GTK's legacy text
 cookie storage is rejected. Persistent OS credential storage and client

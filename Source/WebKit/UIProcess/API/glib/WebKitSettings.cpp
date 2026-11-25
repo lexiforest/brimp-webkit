@@ -4123,7 +4123,7 @@ gboolean webkit_settings_get_navigator_webdriver_enabled(WebKitSettings* setting
 {
     g_return_val_if_fail(WEBKIT_IS_SETTINGS(settings), TRUE);
 
-    return settings->priv->preferences->navigatorWebDriverActivePolicy() != WebCore::NavigatorWebDriverActivePolicy::Disabled;
+    return settings->priv->preferences->navigatorWebDriverActivePolicy() != static_cast<uint32_t>(WebCore::NavigatorWebDriverActivePolicy::Disabled);
 }
 
 /**
@@ -4142,17 +4142,11 @@ void webkit_settings_set_navigator_webdriver_enabled(WebKitSettings* settings, g
 {
     g_return_if_fail(WEBKIT_IS_SETTINGS(settings));
 
-    WebKitSettingsPrivate* priv = settings->priv;
-    auto policy = priv->preferences->navigatorWebDriverActivePolicy();
-    if (!enabled) {
-        if (policy == WebCore::NavigatorWebDriverActivePolicy::Disabled)
-            return;
-        priv->preferences->setNavigatorWebDriverActivePolicy(WebCore::NavigatorWebDriverActivePolicy::Disabled);
-    } else {
-        if (policy != WebCore::NavigatorWebDriverActivePolicy::Disabled)
-            return;
-        priv->preferences->setNavigatorWebDriverActivePolicy(WebCore::NavigatorWebDriverActivePolicy::Auto);
-    }
+    if (webkit_settings_get_navigator_webdriver_enabled(settings) == !!enabled)
+        return;
+
+    auto policy = enabled ? WebCore::NavigatorWebDriverActivePolicy::Auto : WebCore::NavigatorWebDriverActivePolicy::Disabled;
+    settings->priv->preferences->setNavigatorWebDriverActivePolicy(static_cast<uint32_t>(policy));
     g_object_notify_by_pspec(G_OBJECT(settings), sObjProperties[PROP_NAVIGATOR_WEBDRIVER_ENABLED]);
 }
 

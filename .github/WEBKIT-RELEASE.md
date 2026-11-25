@@ -17,6 +17,14 @@ points resolve the tag once and check out that exact commit for every build.
 BUILD-INFO metadata records the tagged commit, including manual runs. Use a new
 tag for each release; publication intentionally fails if the release exists.
 
+The macOS and Linux builds save compiler caches before packaging, including
+partial results after a compile failure. Each target and architecture has a
+separate cache. The build logs report ccache statistics or Xcode cache hits.
+GitHub scopes caches to the workflow ref. To seed a cache that future tag
+builds can read, select the default branch in **Run workflow** and supply the
+release tag as the input. This runs the normal release, including publication.
+Tag-push runs can also reuse caches from earlier attempts on the same tag.
+
 ## Assets
 
 For tag `webkit-v-27.2.1`, the GitHub release contains:

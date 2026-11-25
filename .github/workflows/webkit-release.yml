@@ -99,6 +99,30 @@ jobs:
           ref: ${{ needs.validate.outputs.commit }}
           persist-credentials: false
 
+      - name: Select Linux JSC cache
+        if: matrix.os == 'linux'
+        run: echo "CACHE_PREFIX=v1-jsc-${{ matrix.name }}-manylinux2.28" >> "$GITHUB_ENV"
+
+      - name: Install macOS dependencies
+        if: matrix.os == 'macos'
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.2.app
+          xcodebuild -version
+          echo "CACHE_PREFIX=v1-jsc-${{ matrix.name }}-$(xcodebuild -version | awk '/Build version/ {print $3}')" >> "$GITHUB_ENV"
+          brew install ccache icu4c ninja
+
+      - &restore-compiler-cache
+        name: Restore compiler cache
+        if: runner.os != 'Windows'
+        id: compiler-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: .ci-compiler-cache
+          key: ${{ env.CACHE_PREFIX }}-${{ env.RELEASE_COMMIT }}
+          restore-keys: |
+            ${{ env.CACHE_PREFIX }}-${{ env.RELEASE_COMMIT }}-partial-
+            ${{ env.CACHE_PREFIX }}-
+
       - name: Build on manylinux 2.28
         if: matrix.os == 'linux'
         shell: bash
@@ -106,21 +130,25 @@ jobs:
           docker run --rm \
             --volume "$GITHUB_WORKSPACE:/work" \
             --workdir /work \
+            --env CCACHE_DIR=/work/.ci-compiler-cache \
+            --env CCACHE_MAXSIZE=1G \
+            --env CCACHE_COMPILERCHECK=content \
+            --env CCACHE_COMPRESS=1 \
+            --env CCACHE_UMASK=022 \
             "${{ matrix.manylinux_image }}" \
             bash Tools/Scripts/build-jsc-manylinux.sh \
               "${{ matrix.build_dir }}"
 
-      - name: Install macOS dependencies
-        if: matrix.os == 'macos'
-        run: |
-          sudo xcode-select --switch /Applications/Xcode_27.2.app
-          xcodebuild -version
-          brew install icu4c ninja
-
       - name: Configure and build on macOS
         if: matrix.os == 'macos'
         shell: bash
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ci-compiler-cache
+          CCACHE_MAXSIZE: 1G
+          CCACHE_COMPILERCHECK: content
         run: |
+          ccache --zero-stats
+          trap 'ccache --show-stats' EXIT
           icu_prefix="$(brew --prefix icu4c)"
           cmake -S . -B "${{ matrix.build_dir }}" \
             -G Ninja \
@@ -137,6 +165,18 @@ jobs:
           cmake --build "${{ matrix.build_dir }}" \
             --target jsc \
             --parallel
+
+      # Keep partial compilations available for retries. A failed attempt uses a
+      # separate key so it cannot occupy the completed commit's immutable entry.
+      - &save-compiler-cache
+        name: Save compiler cache
+        if: >-
+          !cancelled() && steps.compiler-cache.outputs.cache-primary-key != '' &&
+          steps.compiler-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: .ci-compiler-cache
+          key: ${{ steps.compiler-cache.outputs.cache-primary-key }}${{ job.status == 'failure' && format('-partial-{0}-{1}', github.run_id, github.run_attempt) || '' }}
 
       - name: Configure and build on Windows
         if: matrix.os == 'windows'
@@ -342,12 +382,14 @@ jobs:
         run: |
           sudo xcode-select --switch /Applications/Xcode_27.2.app
           xcodebuild -version
+          echo "CACHE_PREFIX=v1-webkit-macos-arm64-$(xcodebuild -version | awk '/Build version/ {print $3}')" >> "$GITHUB_ENV"
           xcodebuild -downloadComponent MetalToolchain
           df -h .
       - name: Check macOS API availability
         run: |
           python3 -m pip install pytest
           python3 -m pytest Tools/Scripts/test_macos_availability.py -q
+      - *restore-compiler-cache
       - name: Build frameworks and browser subprocesses
         shell: bash
         run: |
@@ -358,8 +400,12 @@ jobs:
             '--only=Everything up to WebKit' -jobs 2 \
             DEBUG_INFORMATION_FORMAT= GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
             MACOSX_DEPLOYMENT_TARGET="$MACOSX_DEPLOYMENT_TARGET" \
-            COMPILATION_CACHE_ENABLE_CACHING=NO \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            COMPILATION_CACHE_CAS_PATH="$GITHUB_WORKSPACE/.ci-compiler-cache" \
+            COMPILATION_CACHE_LIMIT_SIZE=3G \
+            COMPILATION_CACHE_ENABLE_DIAGNOSTIC_REMARKS=YES \
             2>&1 | tee "$RUNNER_TEMP/webkit-build.log"
+      - *save-compiler-cache
       - name: Package WebKit SDK
         shell: bash
         run: |
@@ -404,7 +450,9 @@ jobs:
       RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
       RELEASE_VERSION: ${{ needs.validate.outputs.version }}
       BRIMP_BUILD_JOBS: "4"
-      CCACHE_DISABLE: "1"
+      CACHE_PREFIX: v1-webkit-ubuntu24.04-x64-clang18
+      CCACHE_MAXSIZE: 3G
+      CCACHE_COMPILERCHECK: content
     steps:
       - name: Check out release sources
         uses: actions/checkout@v6
@@ -435,9 +483,6 @@ jobs:
           echo "$RUNNER_TEMP/webkit-tests/bin" >> "$GITHUB_PATH"
           sudo mkdir -p /opt/brimp
           sudo chown "$(id -u):$(id -g)" /opt/brimp
-          df -h /opt/brimp
-          # Fail before compiling if the runner image leaves insufficient space.
-          test "$(df --output=avail -B1 /opt/brimp | tail -1)" -ge 12884901888
       - name: Enable and verify Bubblewrap sandbox
         shell: bash
         run: |
@@ -445,12 +490,21 @@ jobs:
           # Bubblewrap policy; WebKit's process sandbox remains enabled.
           sudo apparmor_parser -r /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
           bwrap --unshare-user --unshare-pid --ro-bind / / --proc /proc true
+      - *restore-compiler-cache
       - name: Build curl-impersonate and WebKitGTK
         shell: bash
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ci-compiler-cache
         run: |
           set -o pipefail
+          # Check available build space after restoring the cache.
+          df -h /opt/brimp
+          test "$(df --output=avail -B1 /opt/brimp | tail -1)" -ge 12884901888
+          ccache --zero-stats
+          trap 'ccache --show-stats' EXIT
           bash Tools/Scripts/linux-webkit/build.sh "$GITHUB_WORKSPACE" /opt/brimp \
             2>&1 | tee "$RUNNER_TEMP/webkit-linux-build.log"
+      - *save-compiler-cache
       - name: Package Linux SDK
         shell: bash
         run: |

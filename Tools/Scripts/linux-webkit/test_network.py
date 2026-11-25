@@ -588,23 +588,41 @@ def capture_client_hello(action):
     return captured[0]
 
 
-def test_browser_tls_matches_curl_impersonate(browser, server):
+def curl_handshake_signature(target):
     curl = os.environ["CURL_IMPERSONATE_BINARY"]
 
     def curl_handshake(url):
         # The fixture closes after ClientHello; transfer failure is expected.
         subprocess.run(
-            [curl, "--impersonate", "safari270", "--max-time", "10", url],
+            [curl, "--impersonate", target, "--max-time", "10", url],
             capture_output=True,
             timeout=15,
             check=False,
         )
 
-    expected = capture_client_hello(curl_handshake)
-    actual = capture_client_hello(
-        lambda url: browser(
+    return capture_client_hello(curl_handshake)
+
+
+def browser_handshake_signature(browser, server, target=None):
+    environment = {"WEBKIT_CURL_IMPERSONATE": target} if target else {}
+
+    def action(url):
+        return browser(
             server,
             f"try {{ await fetch({json.dumps(url)}); }} catch (e) {{}} return true;",
+            **environment,
         )
+
+    return capture_client_hello(action)
+
+
+def test_browser_tls_matches_curl_impersonate(browser, server):
+    assert browser_handshake_signature(browser, server) == curl_handshake_signature(
+        "safari270"
     )
-    assert actual == expected
+
+
+def test_impersonation_environment_selects_the_transport_profile(browser, server):
+    assert browser_handshake_signature(
+        browser, server, "chrome150"
+    ) == curl_handshake_signature("chrome150")
