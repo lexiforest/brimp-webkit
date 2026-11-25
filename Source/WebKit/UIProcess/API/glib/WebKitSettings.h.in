@@ -528,6 +528,13 @@ webkit_settings_set_enable_javascript_markup                   (WebKitSettings *
                                                                 gboolean        enabled);
 
 WEBKIT_API gboolean
+webkit_settings_get_navigator_webdriver_enabled                (WebKitSettings *settings);
+
+WEBKIT_API void
+webkit_settings_set_navigator_webdriver_enabled                (WebKitSettings *settings,
+                                                                gboolean        enabled);
+
+WEBKIT_API gboolean
 webkit_settings_get_enable_media                               (WebKitSettings *settings);
 
 WEBKIT_API void

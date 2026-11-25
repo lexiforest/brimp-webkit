@@ -38,6 +38,7 @@
 #include "WebPageProxy.h"
 #include "WebPreferences.h"
 #include <WebCore/HTTPParsers.h>
+#include <WebCore/NavigatorWebDriverActivePolicy.h>
 #include <WebCore/PlatformScreen.h>
 #include <WebCore/UserAgent.h>
 #include <cmath>
@@ -187,6 +188,7 @@ enum {
     PROP_ENABLE_BACK_FORWARD_NAVIGATION_GESTURES,
 #endif
     PROP_ENABLE_JAVASCRIPT_MARKUP,
+    PROP_NAVIGATOR_WEBDRIVER_ENABLED,
     PROP_ENABLE_MEDIA,
     PROP_MEDIA_CONTENT_TYPES_REQUIRING_HARDWARE_SUPPORT,
     PROP_ENABLE_WEBRTC,
@@ -412,6 +414,9 @@ ALLOW_DEPRECATED_DECLARATIONS_BEGIN
     case PROP_ENABLE_JAVASCRIPT_MARKUP:
         webkit_settings_set_enable_javascript_markup(settings, g_value_get_boolean(value));
         break;
+    case PROP_NAVIGATOR_WEBDRIVER_ENABLED:
+        webkit_settings_set_navigator_webdriver_enabled(settings, g_value_get_boolean(value));
+        break;
     case PROP_ENABLE_MEDIA:
         webkit_settings_set_enable_media(settings, g_value_get_boolean(value));
         break;
@@ -628,6 +633,9 @@ ALLOW_DEPRECATED_DECLARATIONS_BEGIN
 #endif
     case PROP_ENABLE_JAVASCRIPT_MARKUP:
         g_value_set_boolean(value, webkit_settings_get_enable_javascript_markup(settings));
+        break;
+    case PROP_NAVIGATOR_WEBDRIVER_ENABLED:
+        g_value_set_boolean(value, webkit_settings_get_navigator_webdriver_enabled(settings));
         break;
     case PROP_ENABLE_MEDIA:
         g_value_set_boolean(value, webkit_settings_get_enable_media(settings));
@@ -1636,6 +1644,23 @@ static void webkit_settings_class_init(WebKitSettingsClass* klass)
             _("Enable JavaScript Markup"),
             _("Enable JavaScript in document markup."),
             FEATURE_DEFAULT(JavaScriptMarkupEnabled),
+            readWriteConstructParamFlags);
+
+    /**
+     * WebKitSettings:navigator-webdriver-enabled:
+     *
+     * Whether `navigator.webdriver` may report that the view is controlled by
+     * automation. Setting this to %FALSE forces the WebDriver active policy to
+     * disabled without changing the page's automation control state.
+     *
+     * Since: 2.54
+     */
+    sObjProperties[PROP_NAVIGATOR_WEBDRIVER_ENABLED] =
+        g_param_spec_boolean(
+            "navigator-webdriver-enabled",
+            _("Navigator WebDriver enabled"),
+            _("Whether navigator.webdriver may report automation control"),
+            TRUE,
             readWriteConstructParamFlags);
 
     /**
@@ -4081,6 +4106,54 @@ void webkit_settings_set_enable_javascript_markup(WebKitSettings* settings, gboo
 
     priv->preferences->setJavaScriptMarkupEnabled(enabled);
     g_object_notify_by_pspec(G_OBJECT(settings), sObjProperties[PROP_ENABLE_JAVASCRIPT_MARKUP]);
+}
+
+/**
+ * webkit_settings_get_navigator_webdriver_enabled:
+ * @settings: a #WebKitSettings
+ *
+ * Get the #WebKitSettings:navigator-webdriver-enabled property.
+ *
+ * Returns: %TRUE if `navigator.webdriver` may report automation control,
+ *    or %FALSE if the WebDriver active policy is disabled.
+ *
+ * Since: 2.54
+ */
+gboolean webkit_settings_get_navigator_webdriver_enabled(WebKitSettings* settings)
+{
+    g_return_val_if_fail(WEBKIT_IS_SETTINGS(settings), TRUE);
+
+    return settings->priv->preferences->navigatorWebDriverActivePolicy() != WebCore::NavigatorWebDriverActivePolicy::Disabled;
+}
+
+/**
+ * webkit_settings_set_navigator_webdriver_enabled:
+ * @settings: a #WebKitSettings
+ * @enabled: Value to be set
+ *
+ * Set the #WebKitSettings:navigator-webdriver-enabled property.
+ *
+ * Disabling this property does not change whether the page is controlled by
+ * automation; it only forces `navigator.webdriver` to report %FALSE.
+ *
+ * Since: 2.54
+ */
+void webkit_settings_set_navigator_webdriver_enabled(WebKitSettings* settings, gboolean enabled)
+{
+    g_return_if_fail(WEBKIT_IS_SETTINGS(settings));
+
+    WebKitSettingsPrivate* priv = settings->priv;
+    auto policy = priv->preferences->navigatorWebDriverActivePolicy();
+    if (!enabled) {
+        if (policy == WebCore::NavigatorWebDriverActivePolicy::Disabled)
+            return;
+        priv->preferences->setNavigatorWebDriverActivePolicy(WebCore::NavigatorWebDriverActivePolicy::Disabled);
+    } else {
+        if (policy != WebCore::NavigatorWebDriverActivePolicy::Disabled)
+            return;
+        priv->preferences->setNavigatorWebDriverActivePolicy(WebCore::NavigatorWebDriverActivePolicy::Auto);
+    }
+    g_object_notify_by_pspec(G_OBJECT(settings), sObjProperties[PROP_NAVIGATOR_WEBDRIVER_ENABLED]);
 }
 
 /**
