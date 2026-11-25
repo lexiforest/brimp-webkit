@@ -623,6 +623,9 @@ def test_browser_tls_matches_curl_impersonate(browser, server):
 
 
 def test_impersonation_environment_selects_the_transport_profile(browser, server):
-    assert browser_handshake_signature(
-        browser, server, "chrome150"
-    ) == curl_handshake_signature("chrome150")
+    actual = browser_handshake_signature(browser, server, "chrome150")
+    expected = curl_handshake_signature("chrome150")
+    # Chrome shuffles the ClientHello extensions for each connection.
+    for signature in (actual, expected):
+        signature["extensions"].sort()
+    assert actual == expected
