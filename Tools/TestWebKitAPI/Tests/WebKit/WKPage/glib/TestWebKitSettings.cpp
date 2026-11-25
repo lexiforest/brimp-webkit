@@ -385,6 +385,13 @@ static void testWebKitSettings(Test*, gconstpointer)
     webkit_settings_set_enable_javascript_markup(settings, FALSE);
     g_assert_false(webkit_settings_get_enable_javascript_markup(settings));
 
+    // navigator.webdriver can be hidden without leaving automation control.
+    g_assert_true(webkit_settings_get_navigator_webdriver_enabled(settings));
+    webkit_settings_set_navigator_webdriver_enabled(settings, FALSE);
+    g_assert_false(webkit_settings_get_navigator_webdriver_enabled(settings));
+    webkit_settings_set_navigator_webdriver_enabled(settings, TRUE);
+    g_assert_true(webkit_settings_get_navigator_webdriver_enabled(settings));
+
 #if !ENABLE(2022_GLIB_API)
 ALLOW_DEPRECATED_DECLARATIONS_BEGIN
     // Accelerated 2D canvas is deprecated and always disabled.
